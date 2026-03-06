@@ -78,7 +78,7 @@ const deleteLog = () => {
                             Date & Time
                         </label>
                         <div>
-                            {{ new Date(log.logged_at).toLocaleString() }}
+                            {{ log.formatted_datetime }}
                         </div>
                     </div>
 
@@ -96,9 +96,9 @@ const deleteLog = () => {
 
                     <!-- Metadata -->
                     <div class="text-xs text-gray-400 pt-4 border-t">
-                        Created: {{ new Date(log.created_at).toLocaleString() }}
+                        Created: {{ log.formatted_created_at }}
                         <br />
-                        Updated: {{ new Date(log.updated_at).toLocaleString() }}
+                        Updated: {{ log.formatted_updated_at }}
                     </div>
 
                     <!-- Actions -->

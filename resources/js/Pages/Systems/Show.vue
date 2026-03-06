@@ -92,11 +92,7 @@ const props = defineProps({
                                     </div>
 
                                     <div class="text-xs text-gray-500">
-                                        {{
-                                            new Date(
-                                                log.logged_at,
-                                            ).toLocaleString()
-                                        }}
+                                        {{ log.formatted_datetime }}
                                     </div>
                                 </div>
 

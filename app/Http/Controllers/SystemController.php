@@ -11,7 +11,9 @@ class SystemController extends Controller
     public function index()
     {
         return Inertia::render('Systems/Index', [
-            'systems' => System::latest()->get()
+            'systems' => System::withCount('logs')
+                ->latest()
+                ->get()
         ]);
     }
 

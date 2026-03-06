@@ -8,13 +8,16 @@ const props = defineProps({
     stats: Object,
     logsPerDay: Array,
     logsPerType: Array,
+    logsPerImpact: Array,
+    recentLogs: Array,
 });
 
 const dayChart = ref(null);
 const typeChart = ref(null);
+const impactChart = ref(null);
 
 onMounted(() => {
-    // Logs per Day Chart
+    // Activity Chart
     new Chart(dayChart.value, {
         type: "line",
         data: {
@@ -24,13 +27,25 @@ onMounted(() => {
                     label: "Logs",
                     data: props.logsPerDay.map((d) => d.total),
                     borderWidth: 2,
-                    tension: 0.3,
+                    tension: 0.4,
+                    fill: true,
                 },
             ],
         },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                },
+            },
+        },
     });
 
-    // Logs per Type Chart
+    // Logs by Type
     new Chart(typeChart.value, {
         type: "doughnut",
         data: {
@@ -41,6 +56,33 @@ onMounted(() => {
                 },
             ],
         },
+        options: {
+            plugins: {
+                legend: {
+                    position: "bottom",
+                },
+            },
+        },
+    });
+
+    // Logs by Impact
+    new Chart(impactChart.value, {
+        type: "doughnut",
+        data: {
+            labels: props.logsPerImpact.map((i) => i.impact),
+            datasets: [
+                {
+                    data: props.logsPerImpact.map((i) => i.total),
+                },
+            ],
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: "bottom",
+                },
+            },
+        },
     });
 });
 </script>
@@ -50,59 +92,106 @@ onMounted(() => {
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="text-xl font-semibold text-gray-800">Dashboard</h2>
+            <h2 class="text-xl font-semibold text-gray-800">
+                Engineering Dashboard
+            </h2>
         </template>
 
         <div class="py-8">
             <div class="max-w-7xl mx-auto px-4 space-y-8">
-                <!-- KPI Cards -->
+                <!-- KPI CARDS -->
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
                     <div class="bg-white rounded-xl shadow border p-6">
                         <div class="text-sm text-gray-500">Systems</div>
-                        <div class="text-2xl font-bold">
+                        <div class="text-3xl font-bold mt-1">
                             {{ stats.totalSystems }}
                         </div>
                     </div>
 
                     <div class="bg-white rounded-xl shadow border p-6">
                         <div class="text-sm text-gray-500">Logs Today</div>
-                        <div class="text-2xl font-bold">
+                        <div class="text-3xl font-bold mt-1">
                             {{ stats.logsToday }}
                         </div>
                     </div>
 
                     <div class="bg-white rounded-xl shadow border p-6">
                         <div class="text-sm text-gray-500">This Week</div>
-                        <div class="text-2xl font-bold">
+                        <div class="text-3xl font-bold mt-1">
                             {{ stats.logsThisWeek }}
                         </div>
                     </div>
 
                     <div class="bg-white rounded-xl shadow border p-6">
                         <div class="text-sm text-gray-500">This Month</div>
-                        <div class="text-2xl font-bold">
+                        <div class="text-3xl font-bold mt-1">
                             {{ stats.logsThisMonth }}
                         </div>
                     </div>
 
                     <div class="bg-white rounded-xl shadow border p-6">
-                        <div class="text-sm text-gray-500">High/Critical</div>
-                        <div class="text-2xl font-bold text-red-600">
+                        <div class="text-sm text-gray-500">High / Critical</div>
+                        <div class="text-3xl font-bold text-red-600 mt-1">
                             {{ stats.highCriticalThisMonth }}
                         </div>
                     </div>
                 </div>
 
-                <!-- Charts -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="bg-white rounded-xl shadow border p-6">
-                        <h3 class="mb-4 font-semibold">Logs This Month</h3>
+                <!-- MAIN ANALYTICS -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Activity Trend -->
+                    <div
+                        class="lg:col-span-2 bg-white rounded-xl shadow border p-6"
+                    >
+                        <h3 class="font-semibold mb-4">
+                            Log Activity (Last 30 Days)
+                        </h3>
                         <canvas ref="dayChart"></canvas>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow border p-6">
-                        <h3 class="mb-4 font-semibold">Logs by Type</h3>
-                        <canvas ref="typeChart"></canvas>
+                    <!-- Side Charts -->
+                    <div class="space-y-8">
+                        <div class="bg-white rounded-xl shadow border p-6">
+                            <h3 class="font-semibold mb-4">Logs by Type</h3>
+                            <canvas ref="typeChart"></canvas>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow border p-6">
+                            <h3 class="font-semibold mb-4">Logs by Impact</h3>
+                            <canvas ref="impactChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RECENT LOGS -->
+                <div class="bg-white rounded-xl shadow border p-6">
+                    <h3 class="font-semibold mb-4">Recent Logs</h3>
+
+                    <div
+                        v-for="log in recentLogs"
+                        :key="log.id"
+                        class="flex justify-between items-center py-3 border-b last:border-0"
+                    >
+                        <div class="space-y-1">
+                            <div class="font-medium">
+                                {{ log.title }}
+                            </div>
+
+                            <div class="text-xs text-gray-500">
+                                {{ log.system?.name }}
+                            </div>
+                        </div>
+
+                        <div class="text-sm text-gray-400">
+                            {{ log.formatted_time }}
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="recentLogs.length === 0"
+                        class="text-sm text-gray-400 text-center py-6"
+                    >
+                        No recent logs.
                     </div>
                 </div>
             </div>

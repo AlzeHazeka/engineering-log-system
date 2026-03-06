@@ -19,7 +19,7 @@ const deleteLog = () => {
 <template>
     <tr class="border-t hover:bg-gray-50">
         <td class="p-4">
-            {{ new Date(log.logged_at).toLocaleTimeString() }}
+            {{ log.formatted_time }}
         </td>
 
         <td class="p-4">

@@ -146,8 +146,12 @@ class LogController extends Controller
 
     public function destroy(Log $log)
     {
+        $date = $log->logged_at->toDateString();
+
         $log->delete();
 
-        return redirect()->route('logs.index');
+        return redirect()->route('logs.index', [
+            'date' => $date,
+        ]);
     }
 }
