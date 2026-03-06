@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Head } from "@inertiajs/vue3";
+import ActivityHeatmap from "@/Components/ActivityHeatmap.vue";
 import Chart from "chart.js/auto";
 
 const props = defineProps({
@@ -10,6 +11,9 @@ const props = defineProps({
     logsPerType: Array,
     logsPerImpact: Array,
     recentLogs: Array,
+    criticalLogs: Array,
+    systemHealth: Object,
+    activityHeatmap: Array,
 });
 
 const dayChart = ref(null);
@@ -17,7 +21,6 @@ const typeChart = ref(null);
 const impactChart = ref(null);
 
 onMounted(() => {
-    // Activity Chart
     new Chart(dayChart.value, {
         type: "line",
         data: {
@@ -33,19 +36,15 @@ onMounted(() => {
             ],
         },
         options: {
-            responsive: true,
             plugins: {
                 legend: { display: false },
             },
             scales: {
-                y: {
-                    beginAtZero: true,
-                },
+                y: { beginAtZero: true },
             },
         },
     });
 
-    // Logs by Type
     new Chart(typeChart.value, {
         type: "doughnut",
         data: {
@@ -57,15 +56,10 @@ onMounted(() => {
             ],
         },
         options: {
-            plugins: {
-                legend: {
-                    position: "bottom",
-                },
-            },
+            plugins: { legend: { position: "bottom" } },
         },
     });
 
-    // Logs by Impact
     new Chart(impactChart.value, {
         type: "doughnut",
         data: {
@@ -77,11 +71,7 @@ onMounted(() => {
             ],
         },
         options: {
-            plugins: {
-                legend: {
-                    position: "bottom",
-                },
-            },
+            plugins: { legend: { position: "bottom" } },
         },
     });
 });
@@ -99,7 +89,7 @@ onMounted(() => {
 
         <div class="py-8">
             <div class="max-w-7xl mx-auto px-4 space-y-8">
-                <!-- KPI CARDS -->
+                <!-- KPI -->
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
                     <div class="bg-white rounded-xl shadow border p-6">
                         <div class="text-sm text-gray-500">Systems</div>
@@ -137,29 +127,110 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <!-- MAIN ANALYTICS -->
+                <!-- SYSTEM HEALTH -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <!-- Activity Trend -->
-                    <div
-                        class="lg:col-span-2 bg-white rounded-xl shadow border p-6"
-                    >
-                        <h3 class="font-semibold mb-4">
-                            Log Activity (Last 30 Days)
-                        </h3>
-                        <canvas ref="dayChart"></canvas>
+                    <div class="bg-white rounded-xl shadow border p-6">
+                        <h3 class="font-semibold mb-4">Systems Health</h3>
+
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span>Active</span>
+                                <span class="font-medium text-green-600">
+                                    {{ systemHealth.active }}
+                                </span>
+                            </div>
+
+                            <div class="flex justify-between">
+                                <span>Maintenance</span>
+                                <span class="font-medium text-yellow-600">
+                                    {{ systemHealth.maintenance }}
+                                </span>
+                            </div>
+
+                            <div class="flex justify-between">
+                                <span>Deprecated</span>
+                                <span class="font-medium text-gray-500">
+                                    {{ systemHealth.deprecated }}
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Side Charts -->
-                    <div class="space-y-8">
-                        <div class="bg-white rounded-xl shadow border p-6">
-                            <h3 class="font-semibold mb-4">Logs by Type</h3>
-                            <canvas ref="typeChart"></canvas>
+                    <div class="bg-white rounded-xl shadow border p-6">
+                        <h3 class="font-semibold mb-4">Quick Actions</h3>
+
+                        <div class="flex flex-col gap-2">
+                            <a
+                                :href="route('logs.create')"
+                                class="bg-black text-white text-sm px-3 py-2 rounded-lg text-center"
+                            >
+                                + Add Log
+                            </a>
+
+                            <a
+                                :href="route('systems.create')"
+                                class="border text-sm px-3 py-2 rounded-lg text-center"
+                            >
+                                + Create System
+                            </a>
+
+                            <a
+                                :href="route('logs.index')"
+                                class="border text-sm px-3 py-2 rounded-lg text-center"
+                            >
+                                View Logs
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow border p-6">
+                        <h3 class="font-semibold mb-4">Critical Events</h3>
+
+                        <div
+                            v-for="log in criticalLogs"
+                            :key="log.id"
+                            class="flex justify-between text-sm py-2 border-b last:border-0"
+                        >
+                            <div>{{ log.title }}</div>
+
+                            <div class="text-red-500">
+                                {{ log.formatted_time }}
+                            </div>
                         </div>
 
-                        <div class="bg-white rounded-xl shadow border p-6">
-                            <h3 class="font-semibold mb-4">Logs by Impact</h3>
-                            <canvas ref="impactChart"></canvas>
+                        <div
+                            v-if="criticalLogs.length === 0"
+                            class="text-gray-400 text-sm text-center py-4"
+                        >
+                            No critical events
                         </div>
+                    </div>
+                </div>
+
+                <!-- MAIN CHART -->
+                <div class="bg-white rounded-xl shadow border p-6">
+                    <h3 class="font-semibold mb-4">
+                        Log Activity (Last 30 Days)
+                    </h3>
+
+                    <canvas ref="dayChart"></canvas>
+                </div>
+
+                <!-- HEATMAP -->
+                <ActivityHeatmap :data="activityHeatmap" />
+
+                <!-- DISTRIBUTION CHARTS -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-white rounded-xl shadow border p-6">
+                        <h3 class="font-semibold mb-4">Logs by Type</h3>
+
+                        <canvas ref="typeChart"></canvas>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow border p-6">
+                        <h3 class="font-semibold mb-4">Logs by Impact</h3>
+
+                        <canvas ref="impactChart"></canvas>
                     </div>
                 </div>
 
@@ -172,7 +243,7 @@ onMounted(() => {
                         :key="log.id"
                         class="flex justify-between items-center py-3 border-b last:border-0"
                     >
-                        <div class="space-y-1">
+                        <div>
                             <div class="font-medium">
                                 {{ log.title }}
                             </div>
@@ -189,9 +260,9 @@ onMounted(() => {
 
                     <div
                         v-if="recentLogs.length === 0"
-                        class="text-sm text-gray-400 text-center py-6"
+                        class="text-gray-400 text-sm text-center py-6"
                     >
-                        No recent logs.
+                        No recent logs
                     </div>
                 </div>
             </div>

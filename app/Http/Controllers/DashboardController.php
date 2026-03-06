@@ -13,7 +13,12 @@ class DashboardController extends Controller
     {
         $now = Carbon::now();
 
-        // KPI STATS
+        /*
+        |--------------------------------------------------------------------------
+        | KPI Stats
+        |--------------------------------------------------------------------------
+        */
+
         $totalSystems = System::count();
 
         $logsToday = Log::whereDate('logged_at', $now->toDateString())->count();
@@ -32,7 +37,12 @@ class DashboardController extends Controller
             ->whereIn('impact', ['high', 'critical'])
             ->count();
 
-        // LOGS PER DAY (trend chart)
+        /*
+        |--------------------------------------------------------------------------
+        | Activity Trend
+        |--------------------------------------------------------------------------
+        */
+
         $logsPerDay = Log::selectRaw('DATE(logged_at) as date, COUNT(*) as total')
             ->whereMonth('logged_at', $now->month)
             ->whereYear('logged_at', $now->year)
@@ -40,21 +50,73 @@ class DashboardController extends Controller
             ->orderBy('date')
             ->get();
 
-        // LOGS PER TYPE
+        /*
+        |--------------------------------------------------------------------------
+        | Distribution Charts
+        |--------------------------------------------------------------------------
+        */
+
         $logsPerType = Log::selectRaw('type, COUNT(*) as total')
             ->groupBy('type')
             ->get();
 
-        // LOGS PER IMPACT (NEW)
         $logsPerImpact = Log::selectRaw('impact, COUNT(*) as total')
             ->groupBy('impact')
             ->get();
 
-        // RECENT LOGS (NEW)
+        /*
+        |--------------------------------------------------------------------------
+        | Recent Logs
+        |--------------------------------------------------------------------------
+        */
+
         $recentLogs = Log::with('system')
             ->latest('logged_at')
             ->limit(5)
             ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Critical Events
+        |--------------------------------------------------------------------------
+        */
+
+        $criticalLogs = Log::with('system')
+            ->whereIn('impact', ['high', 'critical'])
+            ->latest('logged_at')
+            ->limit(5)
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | System Health
+        |--------------------------------------------------------------------------
+        */
+
+        $systemHealth = [
+            'active' => System::where('status', 'active')->count(),
+            'maintenance' => System::where('status', 'maintenance')->count(),
+            'deprecated' => System::where('status', 'deprecated')->count(),
+        ];
+
+        $start = Carbon::now()->subDays(29);
+        $end = Carbon::now();
+
+        $logs = Log::selectRaw('DATE(logged_at) as date, COUNT(*) as total')
+            ->whereBetween('logged_at', [$start, $end])
+            ->groupBy('date')
+            ->pluck('total', 'date');
+
+        $activityHeatmap = [];
+
+        for ($date = $start; $date <= $end; $date->addDay()) {
+            $day = $date->format('Y-m-d');
+
+            $activityHeatmap[] = [
+                'date' => $day,
+                'total' => $logs[$day] ?? 0
+            ];
+        }
 
         return Inertia::render('Dashboard', [
             'stats' => [
@@ -72,6 +134,12 @@ class DashboardController extends Controller
             'logsPerImpact' => $logsPerImpact,
 
             'recentLogs' => $recentLogs,
+
+            'criticalLogs' => $criticalLogs,
+
+            'systemHealth' => $systemHealth,
+
+            'activityHeatmap' => $activityHeatmap,
         ]);
     }
 }

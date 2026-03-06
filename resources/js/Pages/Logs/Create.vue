@@ -10,13 +10,15 @@ const props = defineProps({
     impacts: Array,
 });
 
+const now = new Date();
+
 const form = useForm({
+    title: "",
     system_id: "",
     type: "",
     impact: "low",
-    title: "",
+    logged_at: now.toLocaleString("sv-SE").slice(0, 16),
     description: "",
-    logged_at: new Date().toISOString().slice(0, 16),
 });
 
 const submit = () => {
