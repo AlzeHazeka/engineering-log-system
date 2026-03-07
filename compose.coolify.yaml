@@ -16,6 +16,12 @@ services:
       DB_PORT: 3306
     depends_on:
       - mysql
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.laravel.rule=Host(`log.atsiriwellforce.com`)
+      - traefik.http.routers.laravel.entrypoints=http,https
+      - traefik.http.routers.laravel.tls.certresolver=letsencrypt
+      - traefik.http.services.laravel.loadbalancer.server.port=8000
 
   mysql:
     image: mysql:8.4
