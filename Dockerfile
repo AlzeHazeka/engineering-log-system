@@ -1,4 +1,4 @@
-FROM php:8.3-cli
+FROM php:8.4-cli
 
 WORKDIR /var/www/html
 
@@ -7,11 +7,11 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl \
     libzip-dev \
+    libpng-dev \
     nodejs \
     npm \
-    && docker-php-ext-install pdo_mysql zip
+    && docker-php-ext-install pdo_mysql zip gd
 
-# install composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 COPY . .
