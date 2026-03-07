@@ -14,8 +14,6 @@ services:
       APP_DEBUG: false
       DB_HOST: mysql
       DB_PORT: 3306
-    volumes:
-      - ./:/var/www/html
     depends_on:
       - mysql
 
