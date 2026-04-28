@@ -15,6 +15,8 @@ services:
       DB_PORT: 3306
     depends_on:
       - mysql
+    networks:
+      - coolify
 
   mysql:
     image: mysql:8.4
@@ -26,6 +28,12 @@ services:
       MYSQL_PASSWORD: "${DB_PASSWORD}"
     volumes:
       - mysql-data:/var/lib/mysql
+    networks:
+      - coolify
 
 volumes:
   mysql-data:
+
+networks:
+  coolify:
+    external: true
