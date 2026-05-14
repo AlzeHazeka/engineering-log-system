@@ -7,9 +7,14 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { useForm } from '@inertiajs/vue3';
 import { nextTick, ref } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 
 const confirmingUserDeletion = ref(false);
 const passwordInput = ref(null);
+
+const page = usePage();
+const isPrimaryAdmin =
+    page.props.auth?.user?.email === page.props.workstation?.primary_admin_email;
 
 const form = useForm({
     password: '',
@@ -52,7 +57,14 @@ const closeModal = () => {
             </p>
         </header>
 
-        <DangerButton @click="confirmUserDeletion">Delete Account</DangerButton>
+        <div
+            v-if="isPrimaryAdmin"
+            class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+        >
+            Primary administrator account cannot be deleted.
+        </div>
+
+        <DangerButton v-else @click="confirmUserDeletion">Delete Account</DangerButton>
 
         <Modal :show="confirmingUserDeletion" @close="closeModal">
             <div class="p-6">

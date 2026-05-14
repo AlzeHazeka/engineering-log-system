@@ -15,22 +15,38 @@ return new class extends Migration
                 ->constrained()
                 ->cascadeOnDelete();
 
+            $table->foreignId('feature_id')
+                ->nullable()
+                ->constrained('features')
+                ->nullOnDelete();
+
+            $table->foreignId('reference_log_id')
+                ->nullable()
+                ->constrained('logs')
+                ->nullOnDelete();
+
             $table->enum('type', [
-                'change',
-                'error',
+                'progress',
+                'bug',
                 'fix',
+                'deployment',
                 'maintenance',
                 'decision',
-                'deployment',
-                'idea'
-            ]);
+                'idea',
+            ])->default('progress');
 
             $table->enum('impact', [
                 'low',
                 'medium',
                 'high',
-                'critical'
-            ])->default('low');
+                'critical',
+            ])->nullable();
+
+            $table->enum('status', [
+                'open',
+                'resolved',
+                'ignored',
+            ])->nullable();
 
             $table->string('title');
             $table->longText('description');
@@ -39,9 +55,11 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // Composite index untuk filter cepat
             $table->index(['system_id', 'type']);
             $table->index(['system_id', 'impact']);
+            $table->index(['system_id', 'feature_id']);
+            $table->index('feature_id');
+            $table->index('reference_log_id');
         });
     }
 
@@ -50,3 +68,4 @@ return new class extends Migration
         Schema::dropIfExists('logs');
     }
 };
+

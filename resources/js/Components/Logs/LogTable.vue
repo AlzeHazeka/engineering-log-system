@@ -8,6 +8,8 @@ defineProps({
     logTypeLabel: Object,
     impactMap: Object,
     impactLabel: Object,
+    logStatusMap: Object,
+    logStatusLabel: Object,
 });
 
 const emit = defineEmits(["delete"]);
@@ -21,10 +23,12 @@ const emit = defineEmits(["delete"]);
                     <tr>
                         <th class="p-4">Time</th>
                         <th class="p-4">System</th>
+                        <th class="p-4">Feature</th>
                         <th class="p-4">Title</th>
                         <th class="p-4">Type</th>
                         <th class="p-4">Impact</th>
-                        <th class="p-4 text-right">Actions</th>
+                        <th class="p-4">Status</th>
+                        <th class="p-4 text-right w-32 whitespace-nowrap">Actions</th>
                     </tr>
                 </thead>
 
@@ -37,11 +41,13 @@ const emit = defineEmits(["delete"]);
                         :logTypeLabel="logTypeLabel"
                         :impactMap="impactMap"
                         :impactLabel="impactLabel"
+                        :logStatusMap="logStatusMap"
+                        :logStatusLabel="logStatusLabel"
                         @delete="emit('delete', $event)"
                     />
 
                     <tr v-if="logs.data.length === 0">
-                        <td colspan="6" class="p-6 text-center text-gray-400">
+                        <td colspan="8" class="p-6 text-center text-gray-400">
                             No logs found.
                         </td>
                     </tr>

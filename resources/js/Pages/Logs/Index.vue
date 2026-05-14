@@ -1,8 +1,8 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { router } from "@inertiajs/vue3";
+import { Plus } from "lucide-vue-next";
 
-import LogFilterBar from "@/Components/Logs/LogFilterBar.vue";
 import LogTable from "@/Components/Logs/LogTable.vue";
 
 import {
@@ -10,26 +10,14 @@ import {
     logTypeLabel,
     impactMap,
     impactLabel,
+    logStatusMap,
+    logStatusLabel,
 } from "@/Utils/enums";
 
 const props = defineProps({
     logs: Object,
-    filters: Object,
-    systems: Array,
+    system: Object,
 });
-
-const applyFilter = (filters) => {
-    router.get(route("logs.index"), filters, {
-        preserveState: true,
-        replace: true,
-    });
-};
-
-const resetFilter = () => {
-    router.get(route("logs.index"), {
-        date: new Date().toISOString().slice(0, 10),
-    });
-};
 
 const deleteLog = (id) => {
     if (confirm("Delete this log?")) {
@@ -42,32 +30,40 @@ const deleteLog = (id) => {
 
 <template>
     <AuthenticatedLayout>
-        <template #header>
-            <h2 class="text-xl font-semibold leading-tight text-gray-800">
-                Logs
-            </h2>
-        </template>
+        <div class="space-y-6">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-semibold leading-tight text-gray-900">
+                        Logs
+                    </h2>
+                    <p v-if="system" class="text-sm text-gray-500">
+                        System: {{ system.name }}
+                    </p>
+                    <p v-else class="text-sm text-gray-500">
+                        Latest timeline entries.
+                    </p>
+                </div>
 
-        <div class="py-8">
-            <div class="max-w-7xl mx-auto px-4 space-y-6">
-                <LogFilterBar
-                    :filters="filters"
-                    :systems="systems"
-                    :logTypeLabel="logTypeLabel"
-                    :impactLabel="impactLabel"
-                    @update="applyFilter"
-                    @reset="resetFilter"
-                />
-
-                <LogTable
-                    :logs="logs"
-                    :logTypeMap="logTypeMap"
-                    :logTypeLabel="logTypeLabel"
-                    :impactMap="impactMap"
-                    :impactLabel="impactLabel"
-                    @delete="deleteLog"
-                />
+                <a
+                    :href="route('logs.create')"
+                    class="inline-flex items-center justify-center rounded-lg bg-black text-white p-2 hover:opacity-90 transition"
+                    title="Create log"
+                    aria-label="Create log"
+                >
+                    <Plus class="h-5 w-5" />
+                </a>
             </div>
+
+            <LogTable
+                :logs="logs"
+                :logTypeMap="logTypeMap"
+                :logTypeLabel="logTypeLabel"
+                :impactMap="impactMap"
+                :impactLabel="impactLabel"
+                :logStatusMap="logStatusMap"
+                :logStatusLabel="logStatusLabel"
+                @delete="deleteLog"
+            />
         </div>
     </AuthenticatedLayout>
 </template>

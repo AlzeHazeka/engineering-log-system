@@ -1,109 +1,44 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
-import { useForm } from "@inertiajs/vue3";
-import { systemStatusLabel } from "@/Utils/enums";
+import SystemForm from "./Form.vue";
+import { ArrowLeft } from "lucide-vue-next";
 
 const props = defineProps({
     system: Object,
+    features: Array,
 });
-
-const form = useForm({
-    name: props.system.name,
-    status: props.system.status,
-    description: props.system.description || "",
-    repository_url: props.system.repository_url || "",
-});
-
-const submit = () => {
-    form.put(route("systems.update", props.system.slug));
-};
 </script>
 
 <template>
     <AuthenticatedLayout>
-        <template #header>
-            <h2 class="text-xl font-semibold text-gray-800">Edit System</h2>
-        </template>
-
         <div class="py-8">
-            <div class="max-w-3xl mx-auto px-4">
-                <div class="bg-white rounded-xl shadow border p-8 space-y-6">
-                    <!-- Name -->
+            <div class="max-w-3xl mx-auto px-4 space-y-4">
+                <div class="flex items-start justify-between gap-4">
                     <div>
-                        <label class="block text-sm text-gray-500 mb-1"
-                            >Name</label
-                        >
-                        <input
-                            v-model="form.name"
-                            class="w-full border rounded-lg px-4 py-2"
-                        />
+                        <h2 class="text-xl font-semibold text-gray-900">
+                            Edit System
+                        </h2>
+                        <p class="text-sm text-gray-500">
+                            Update system metadata and lifecycle fields.
+                        </p>
                     </div>
 
-                    <!-- Status -->
-                    <div>
-                        <label class="block text-sm text-gray-500 mb-1"
-                            >Status</label
-                        >
-                        <select
-                            v-model="form.status"
-                            class="w-full border rounded-lg px-4 py-2"
-                        >
-                            <option value="active">
-                                {{ systemStatusLabel.active }}
-                            </option>
-                            <option value="maintenance">
-                                {{ systemStatusLabel.maintenance }}
-                            </option>
-                            <option value="paused">
-                                {{ systemStatusLabel.paused }}
-                            </option>
-                            <option value="deprecated">
-                                {{ systemStatusLabel.deprecated }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- Repository -->
-                    <div>
-                        <label class="block text-sm text-gray-500 mb-1">
-                            Repository URL
-                        </label>
-                        <input
-                            v-model="form.repository_url"
-                            class="w-full border rounded-lg px-4 py-2"
-                        />
-                    </div>
-
-                    <!-- Description -->
-                    <div>
-                        <label class="block text-sm text-gray-500 mb-1">
-                            Description
-                        </label>
-                        <textarea
-                            v-model="form.description"
-                            rows="4"
-                            class="w-full border rounded-lg px-4 py-2"
-                        />
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="flex justify-between pt-6">
-                        <a
-                            :href="route('systems.show', system.slug)"
-                            class="px-4 py-2 border rounded-lg"
-                        >
-                            Cancel
-                        </a>
-
-                        <button
-                            @click="submit"
-                            class="bg-black text-white px-6 py-2 rounded-lg"
-                            :disabled="form.processing"
-                        >
-                            Update System
-                        </button>
-                    </div>
+                    <a
+                        :href="route('systems.show', system.slug)"
+                        class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50 transition"
+                        title="Back"
+                        aria-label="Back"
+                    >
+                        <ArrowLeft class="h-5 w-5" />
+                    </a>
                 </div>
+
+                <SystemForm
+                    :system="system"
+                    :features="features"
+                    method="put"
+                    :submitUrl="route('systems.update', system.slug)"
+                />
             </div>
         </div>
     </AuthenticatedLayout>

@@ -14,19 +14,25 @@ return new class extends Migration
             $table->string('name');
             $table->string('slug')->unique();
 
+            // Operational status (runtime condition)
             $table->enum('status', [
                 'active',
                 'maintenance',
                 'paused',
-                'deprecated'
+                'deprecated',
             ])->default('active');
+
+            // Lifecycle stage (manual, nullable for backward compatibility)
+            $table->string('stage')->nullable();
+
+            // Release marker (nullable)
+            $table->date('released_at')->nullable();
 
             $table->text('description')->nullable();
             $table->string('repository_url')->nullable();
 
             $table->timestamps();
 
-            // Index penting untuk filtering cepat
             $table->index('status');
         });
     }
@@ -36,3 +42,4 @@ return new class extends Migration
         Schema::dropIfExists('systems');
     }
 };
+

@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Vue Datepicker theme (Terracotta) */
+.dp__theme_light {
+    --dp-primary-color: #af4324;
+    --dp-primary-text-color: #ffffff;
+    --dp-hover-color: #d1603f;
+    --dp-border-color: #e5e7eb;
+    --dp-background-color: #ffffff;
+    --dp-text-color: #1f2937;
+    --dp-border-radius: 0.75rem;
+    --dp-font-size: 0.875rem;
+    --dp-input-padding: 0.75rem 2.75rem 0.75rem 2.75rem;
+    --dp-input-icon-padding: 2.75rem;
+}
+
+.dp__input {
+    border-radius: 0.75rem;
+    border: 1px solid #d1d5db;
+    line-height: 1.25rem;
+}
+
+.dp__input:focus {
+    border-color: #af4324;
+    box-shadow: 0 0 0 2px rgba(175, 67, 36, 0.2);
+}
+
+.dp__input_focus {
+    border-color: #af4324;
+    box-shadow: 0 0 0 2px rgba(175, 67, 36, 0.2);
+}
+
 .ProseMirror {
     outline: none;
 }

@@ -3,143 +3,99 @@
 namespace App\Http\Controllers;
 
 use App\Models\Log;
+use App\Models\Feature;
 use App\Models\System;
-use Carbon\Carbon;
 use Inertia\Inertia;
+use Throwable;
 
 class DashboardController extends Controller
 {
     public function index()
     {
-        $now = Carbon::now();
+        try {
+            $systemsCount = System::count();
 
-        /*
-        |--------------------------------------------------------------------------
-        | KPI Stats
-        |--------------------------------------------------------------------------
-        */
+            $logsToday = Log::whereDate('logged_at', today())->count();
 
-        $totalSystems = System::count();
+            $logsThisWeek = Log::whereBetween('logged_at', [
+                now()->startOfWeek(),
+                now()->endOfWeek(),
+            ])->count();
 
-        $logsToday = Log::whereDate('logged_at', $now->toDateString())->count();
+            $logsThisMonth = Log::whereMonth('logged_at', now()->month)
+                ->whereYear('logged_at', now()->year)
+                ->count();
 
-        $logsThisWeek = Log::whereBetween('logged_at', [
-            $now->copy()->startOfWeek(),
-            $now->copy()->endOfWeek(),
-        ])->count();
+            $highCritical = Log::whereIn('impact', ['high', 'critical'])->count();
 
-        $logsThisMonth = Log::whereMonth('logged_at', $now->month)
-            ->whereYear('logged_at', $now->year)
-            ->count();
-
-        $highCriticalThisMonth = Log::whereMonth('logged_at', $now->month)
-            ->whereYear('logged_at', $now->year)
-            ->whereIn('impact', ['high', 'critical'])
-            ->count();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Activity Trend
-        |--------------------------------------------------------------------------
-        */
-
-        $logsPerDay = Log::selectRaw('DATE(logged_at) as date, COUNT(*) as total')
-            ->whereMonth('logged_at', $now->month)
-            ->whereYear('logged_at', $now->year)
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Distribution Charts
-        |--------------------------------------------------------------------------
-        */
-
-        $logsPerType = Log::selectRaw('type, COUNT(*) as total')
-            ->groupBy('type')
-            ->get();
-
-        $logsPerImpact = Log::selectRaw('impact, COUNT(*) as total')
-            ->groupBy('impact')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Recent Logs
-        |--------------------------------------------------------------------------
-        */
-
-        $recentLogs = Log::with('system')
-            ->latest('logged_at')
-            ->limit(5)
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Critical Events
-        |--------------------------------------------------------------------------
-        */
-
-        $criticalLogs = Log::with('system')
-            ->whereIn('impact', ['high', 'critical'])
-            ->latest('logged_at')
-            ->limit(5)
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | System Health
-        |--------------------------------------------------------------------------
-        */
-
-        $systemHealth = [
-            'active' => System::where('status', 'active')->count(),
-            'maintenance' => System::where('status', 'maintenance')->count(),
-            'deprecated' => System::where('status', 'deprecated')->count(),
-        ];
-
-        $start = Carbon::now()->subDays(29);
-        $end = Carbon::now();
-
-        $logs = Log::selectRaw('DATE(logged_at) as date, COUNT(*) as total')
-            ->whereBetween('logged_at', [$start, $end])
-            ->groupBy('date')
-            ->pluck('total', 'date');
-
-        $activityHeatmap = [];
-
-        for ($date = $start; $date <= $end; $date->addDay()) {
-            $day = $date->format('Y-m-d');
-
-            $activityHeatmap[] = [
-                'date' => $day,
-                'total' => $logs[$day] ?? 0
+            $systemsHealth = [
+                'active' => System::where('status', 'active')->count(),
+                'maintenance' => System::where('status', 'maintenance')->count(),
+                'deprecated' => System::where('status', 'deprecated')->count(),
             ];
+
+            $recentLogs = Log::with('system:id,name')
+                ->latest('logged_at')
+                ->take(10)
+                ->get();
+
+            $criticalEvents = Log::with('system:id,name')
+                ->where('impact', 'critical')
+                ->latest('logged_at')
+                ->take(5)
+                ->get();
+
+            $completedFeatures = Feature::query()
+                ->whereNotNull('completed_at')
+                ->whereNotNull('due_date')
+                ->get();
+
+            $onTimeFeatures = $completedFeatures->filter(fn (Feature $f) => $f->isCompletedOnTime() === true);
+
+            $featureOnTimeRate = $completedFeatures->count()
+                ? (int) round(($onTimeFeatures->count() / $completedFeatures->count()) * 100)
+                : 0;
+
+            $resolvedFixLogs = Log::query()
+                ->where('type', 'fix')
+                ->where('status', 'resolved')
+                ->whereNotNull('resolved_at')
+                ->with(['references:id,type,impact,logged_at'])
+                ->get();
+
+            $onTimeResolved = $resolvedFixLogs->filter(fn (Log $log) => $log->isResolvedOnTime() === true);
+
+            $bugOnTimeRate = $resolvedFixLogs->count()
+                ? (int) round(($onTimeResolved->count() / $resolvedFixLogs->count()) * 100)
+                : 0;
+        } catch (Throwable) {
+            $systemsCount = 0;
+            $logsToday = 0;
+            $logsThisWeek = 0;
+            $logsThisMonth = 0;
+            $highCritical = 0;
+            $systemsHealth = [
+                'active' => 0,
+                'maintenance' => 0,
+                'deprecated' => 0,
+            ];
+            $recentLogs = collect();
+            $criticalEvents = collect();
+            $featureOnTimeRate = 0;
+            $bugOnTimeRate = 0;
         }
 
         return Inertia::render('Dashboard', [
-            'stats' => [
-                'totalSystems' => $totalSystems,
-                'logsToday' => $logsToday,
-                'logsThisWeek' => $logsThisWeek,
-                'logsThisMonth' => $logsThisMonth,
-                'highCriticalThisMonth' => $highCriticalThisMonth,
-            ],
-
-            'logsPerDay' => $logsPerDay,
-
-            'logsPerType' => $logsPerType,
-
-            'logsPerImpact' => $logsPerImpact,
-
+            'systemsCount' => $systemsCount,
+            'logsToday' => $logsToday,
+            'logsThisWeek' => $logsThisWeek,
+            'logsThisMonth' => $logsThisMonth,
+            'highCritical' => $highCritical,
+            'systemsHealth' => $systemsHealth,
             'recentLogs' => $recentLogs,
-
-            'criticalLogs' => $criticalLogs,
-
-            'systemHealth' => $systemHealth,
-
-            'activityHeatmap' => $activityHeatmap,
+            'criticalEvents' => $criticalEvents,
+            'featureOnTimeRate' => $featureOnTimeRate,
+            'bugOnTimeRate' => $bugOnTimeRate,
         ]);
     }
 }

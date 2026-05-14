@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from "vue";
+import DateField from "@/Components/DateField.vue";
 
 const props = defineProps({
     filters: Object,
@@ -55,11 +56,7 @@ const reset = () => {
             <!-- Date -->
             <div>
                 <label class="block text-sm text-gray-500 mb-1">Date</label>
-                <input
-                    type="date"
-                    v-model="date"
-                    class="border rounded-lg px-3 py-2"
-                />
+                <DateField v-model="date" />
             </div>
 
             <!-- System -->

@@ -1,4 +1,4 @@
-# Engineering Log System
+# System Management Log System
 
 ![Laravel](https://img.shields.io/badge/Laravel-12-red?style=for-the-badge&logo=laravel)
 ![Vue](https://img.shields.io/badge/Vue-3-42b883?style=for-the-badge&logo=vue.js)
@@ -7,7 +7,7 @@
 ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?style=for-the-badge&logo=mysql)
 ![Docker](https://img.shields.io/badge/Docker-Development-2496ED?style=for-the-badge&logo=docker)
 
-A lightweight internal engineering log & reporting system built with Laravel 12 and Vue 3.
+A lightweight internal system management log & reporting system built with Laravel 12 and Vue 3.
 
 This project was created as a portfolio full-stack application demonstrating clean CRUD architecture, dashboard analytics, and dynamic PDF/Excel reporting.
 
@@ -15,7 +15,7 @@ This project was created as a portfolio full-stack application demonstrating cle
 
 ## ✨ Overview
 
-Engineering Log System is designed to:
+System Management Log System is designed to:
 
 - Track technical changes, incidents, and maintenance activities
 - Categorize logs by type and impact level

@@ -51,6 +51,12 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
+        if (($user?->email ?? null) === config('workstation.primary_admin_email')) {
+            return back()->withErrors([
+                'user' => 'Primary administrator account cannot be deleted.',
+            ]);
+        }
+
         Auth::logout();
 
         $user->delete();
