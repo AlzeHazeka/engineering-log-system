@@ -521,6 +521,7 @@ class ReportController extends Controller
         $bugCount = $logs->where('type', 'bug')->count();
         $fixCount = $logs->where('type', 'fix')->count();
         $resolvedBugCount = $logs->where('type', 'bug')->where('status', 'resolved')->count();
+        $openBugCount = $logs->where('type', 'bug')->where('status', 'open')->count();
 
         $progressOnProgressCount = $logs
             ->where('type', 'progress')
@@ -547,6 +548,19 @@ class ReportController extends Controller
             ? (int) round(($onTimeResolvedCount / $resolvedFix->count()) * 100)
             : 0;
 
+        $completionRate = ($progressCount + $fixCount) > 0
+            ? (int) round((($progressDoneCount + $resolvedFix->count()) / ($progressCount + $fixCount)) * 100)
+            : 0;
+
+        $bugImpact = $logs
+            ->where('type', 'bug')
+            ->groupBy(fn (Log $log) => $log->impact ?: 'unknown')
+            ->map(fn ($items) => $items->count());
+
+        $impactDistribution = collect(['critical', 'high', 'medium', 'low', 'unknown'])
+            ->mapWithKeys(fn ($k) => [$k => (int) ($bugImpact[$k] ?? 0)])
+            ->all();
+
         $pdf = Pdf::loadView('reports.pdf', [
             'meta' => [
                 'start_date' => $startAt->toDateString(),
@@ -561,11 +575,13 @@ class ReportController extends Controller
                 'bug_logs' => $bugCount,
                 'fix_logs' => $fixCount,
                 'resolved_bug_count' => $resolvedBugCount,
+                'open_bug_count' => $openBugCount,
                 'progress_on_progress' => $progressOnProgressCount,
                 'progress_done' => $progressDoneCount,
                 'sla_on_time_rate' => $slaOnTimeRate,
                 'sla_on_time' => $onTimeResolvedCount,
                 'sla_late' => $lateResolvedCount,
+                'completion_rate' => $completionRate,
             ],
             'logs' => $logs,
             'bug_summary' => [
@@ -574,6 +590,21 @@ class ReportController extends Controller
                 'resolved_fix' => $resolvedFix->count(),
                 'on_time' => $onTimeResolvedCount,
                 'late' => $lateResolvedCount,
+            ],
+            'charts' => [
+                'bug_vs_fix' => [
+                    'bug' => $bugCount,
+                    'fix' => $fixCount,
+                ],
+                'sla_on_time' => [
+                    'on_time' => $onTimeResolvedCount,
+                    'late' => $lateResolvedCount,
+                ],
+                'progress_status' => [
+                    'on_progress' => $progressOnProgressCount,
+                    'done' => $progressDoneCount,
+                ],
+                'impact_distribution' => $impactDistribution,
             ],
         ])
             ->setPaper('a4', 'portrait');
