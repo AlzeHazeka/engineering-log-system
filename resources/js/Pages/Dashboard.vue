@@ -3,6 +3,7 @@ import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Head } from "@inertiajs/vue3";
 import { timeAgo } from "@/Utils/datetime";
 import { Eye, FilePlus, Layers } from "lucide-vue-next";
+import { useSoftRevalidate } from "@/Utils/softRevalidate";
 
 const props = defineProps({
     systemsCount: Number,
@@ -15,6 +16,21 @@ const props = defineProps({
     recentLogs: Array,
     criticalEvents: Array,
     systemsHealth: Object,
+});
+
+useSoftRevalidate({
+    only: [
+        "systemsCount",
+        "logsToday",
+        "logsThisWeek",
+        "logsThisMonth",
+        "highCritical",
+        "featureOnTimeRate",
+        "bugOnTimeRate",
+        "recentLogs",
+        "criticalEvents",
+        "systemsHealth",
+    ],
 });
 </script>
 

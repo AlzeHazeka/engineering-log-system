@@ -2,6 +2,8 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Link, router, usePage } from "@inertiajs/vue3";
 import { Plus, Pencil, Trash2 } from "lucide-vue-next";
+import ConfirmModal from "@/Components/ConfirmModal.vue";
+import { ref } from "vue";
 
 const page = usePage();
 
@@ -13,16 +15,30 @@ const props = defineProps({
 const canManage = !!page.props.can?.manage_users;
 const primaryAdminEmail = page.props.workstation?.primary_admin_email;
 
+const deleteConfirmOpen = ref(false);
+const deleteTarget = ref(null);
+
 const destroyUser = (user) => {
-    if (!confirm(`Delete user: ${user.name}?`)) return;
-    router.delete(route("users.destroy", user.id), { preserveScroll: true });
+    deleteTarget.value = user;
+    deleteConfirmOpen.value = true;
+};
+
+const confirmDelete = () => {
+    if (!deleteTarget.value) return;
+    router.delete(route("users.destroy", deleteTarget.value.id), {
+        preserveScroll: true,
+        onFinish: () => {
+            deleteConfirmOpen.value = false;
+            deleteTarget.value = null;
+        },
+    });
 };
 </script>
 
 <template>
     <AuthenticatedLayout>
         <div class="space-y-6">
-            <div class="flex items-start justify-between gap-4">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div>
                     <div class="text-xl font-semibold text-slate-900">
                         Users
@@ -35,7 +51,7 @@ const destroyUser = (user) => {
                 <Link
                     v-if="canManage"
                     :href="route('users.create')"
-                    class="inline-flex items-center justify-center rounded-lg bg-slate-900 p-2 text-white hover:bg-slate-800 transition"
+                    class="self-start sm:self-auto inline-flex items-center justify-center rounded-lg bg-slate-900 p-2 text-white hover:bg-slate-800 transition"
                     title="New user"
                     aria-label="New user"
                 >
@@ -116,4 +132,24 @@ const destroyUser = (user) => {
             </div>
         </div>
     </AuthenticatedLayout>
+
+    <ConfirmModal
+        :show="deleteConfirmOpen"
+        title="Hapus user?"
+        description="Tindakan ini tidak bisa dibatalkan."
+        confirmText="Ya, hapus"
+        cancelText="Batal"
+        tone="danger"
+        @close="deleteConfirmOpen = false"
+        @confirm="confirmDelete"
+    >
+        <div v-if="deleteTarget" class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div class="text-sm font-medium text-slate-900">
+                {{ deleteTarget.name }}
+            </div>
+            <div class="mt-1 text-xs text-slate-500">
+                {{ deleteTarget.email }}
+            </div>
+        </div>
+    </ConfirmModal>
 </template>

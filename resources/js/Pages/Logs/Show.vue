@@ -1,9 +1,11 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { router } from "@inertiajs/vue3";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-vue-next";
+import { ArrowLeft, Pencil, Trash2, CheckCircle2 } from "lucide-vue-next";
 import Badge from "@/Components/Badge.vue";
+import Modal from "@/Components/Modal.vue";
+import ConfirmModal from "@/Components/ConfirmModal.vue";
 import {
     logTypeMap,
     logTypeLabel,
@@ -16,7 +18,38 @@ import { timeAgo } from "@/Utils/datetime";
 
 const props = defineProps({
     log: Object,
+    returnUrl: { type: String, default: null },
 });
+
+const showMarkDone = computed(
+    () => props.log?.type === "progress" && props.log?.status === "on_progress"
+);
+
+const markDoneOpen = ref(false);
+
+const openMarkDone = () => {
+    markDoneOpen.value = true;
+};
+
+const confirmMarkDone = () => {
+    const url = props.returnUrl
+        ? `${route("logs.markDone", props.log.id)}?return=${encodeURIComponent(
+              props.returnUrl
+          )}`
+        : route("logs.markDone", props.log.id);
+
+    router.put(
+        url,
+        {},
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => {
+                markDoneOpen.value = false;
+            },
+        }
+    );
+};
 
 const impactBadge = computed(() => {
     if (!props.log.impact) {
@@ -50,17 +83,34 @@ const slaBadge = computed(() => {
 });
 
 const deleteLog = () => {
-    if (confirm("Are you sure you want to delete this log?")) {
-        router.delete(route("logs.destroy", props.log.id));
-    }
+    deleteConfirmOpen.value = true;
+};
+
+const deleteConfirmOpen = ref(false);
+
+const confirmDelete = () => {
+    const url = props.returnUrl
+        ? `${route("logs.destroy", props.log.id)}?return=${encodeURIComponent(
+              props.returnUrl
+          )}`
+        : route("logs.destroy", props.log.id);
+
+    router.delete(url, {
+        preserveScroll: true,
+        onFinish: () => {
+            deleteConfirmOpen.value = false;
+        },
+    });
 };
 </script>
 
 <template>
     <AuthenticatedLayout>
-        <div class="py-8">
+        <div class="py-4 sm:py-8">
             <div class="max-w-4xl mx-auto px-4 space-y-4">
-                <div class="flex items-start justify-between gap-4">
+                <div
+                    class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"
+                >
                     <div>
                         <h2 class="text-xl font-semibold text-gray-900">
                             Log Detail
@@ -70,9 +120,9 @@ const deleteLog = () => {
                         </p>
                     </div>
 
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
                         <a
-                            :href="route('logs.index')"
+                            :href="returnUrl || route('logs.index')"
                             class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50 transition"
                             title="Back"
                             aria-label="Back"
@@ -80,8 +130,23 @@ const deleteLog = () => {
                             <ArrowLeft class="h-5 w-5" />
                         </a>
 
+                        <button
+                            v-if="showMarkDone"
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-[#AF4324] hover:bg-[#AF4324]/10 transition"
+                            title="Mark as Done"
+                            aria-label="Mark as Done"
+                            @click="openMarkDone"
+                        >
+                            <CheckCircle2 class="h-5 w-5" />
+                        </button>
+
                         <a
-                            :href="route('logs.edit', log.id)"
+                            :href="
+                                returnUrl
+                                    ? `${route('logs.edit', log.id)}?return=${encodeURIComponent(returnUrl)}`
+                                    : route('logs.edit', log.id)
+                            "
                             class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50 transition"
                             title="Edit"
                             aria-label="Edit"
@@ -101,7 +166,7 @@ const deleteLog = () => {
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow border p-8 space-y-6">
+                <div class="bg-white rounded-xl shadow border p-5 sm:p-8 space-y-6">
                     <!-- Title -->
                     <div>
                         <label class="block text-sm text-gray-500 mb-1"
@@ -213,7 +278,11 @@ const deleteLog = () => {
                         <ul class="list-disc list-inside text-sm space-y-1">
                             <li v-for="r in log.references" :key="r.id">
                                 <a
-                                    :href="route('logs.show', r.id)"
+                                    :href="
+                                        returnUrl
+                                            ? `${route('logs.show', r.id)}?return=${encodeURIComponent(returnUrl)}`
+                                            : route('logs.show', r.id)
+                                    "
                                     class="text-blue-600 hover:underline"
                                 >
                                     {{ r.title }}
@@ -248,4 +317,66 @@ const deleteLog = () => {
             </div>
         </div>
     </AuthenticatedLayout>
+
+    <Modal :show="markDoneOpen" maxWidth="lg" @close="markDoneOpen = false">
+        <div class="p-6">
+            <div class="text-lg font-semibold text-slate-900">
+                Tandai log sebagai Done?
+            </div>
+            <div class="mt-2 text-sm text-slate-600">
+                Ini akan mengubah status progress menjadi
+                <span class="font-medium">Done</span>.
+            </div>
+
+            <div
+                class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+            >
+                <div class="text-sm font-medium text-slate-900">
+                    {{ log.title }}
+                </div>
+                <div class="mt-1 text-xs text-slate-500">
+                    {{ log.system?.name ?? "—" }}
+                    <span v-if="log.feature"> · {{ log.feature.title }}</span>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-2">
+                <button
+                    type="button"
+                    class="inline-flex items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                    @click="markDoneOpen = false"
+                >
+                    Batal
+                </button>
+                <button
+                    type="button"
+                    class="inline-flex items-center rounded-lg border border-[#AF4324] bg-[#AF4324] px-4 py-2 text-sm font-medium text-white hover:opacity-95 transition"
+                    @click="confirmMarkDone"
+                >
+                    Ya, Done
+                </button>
+            </div>
+        </div>
+    </Modal>
+
+    <ConfirmModal
+        :show="deleteConfirmOpen"
+        title="Hapus log?"
+        description="Tindakan ini tidak bisa dibatalkan."
+        confirmText="Ya, hapus"
+        cancelText="Batal"
+        tone="danger"
+        @close="deleteConfirmOpen = false"
+        @confirm="confirmDelete"
+    >
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div class="text-sm font-medium text-slate-900">
+                {{ log.title }}
+            </div>
+            <div class="mt-1 text-xs text-slate-500">
+                {{ log.system?.name ?? "—" }}
+                <span v-if="log.feature"> · {{ log.feature.title }}</span>
+            </div>
+        </div>
+    </ConfirmModal>
 </template>

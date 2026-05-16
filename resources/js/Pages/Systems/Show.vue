@@ -20,14 +20,19 @@ import {
 } from "@/Utils/enums";
 import { computed } from "vue";
 import { formatDate, timeAgo } from "@/Utils/datetime";
-import { router } from "@inertiajs/vue3";
+import { router, usePage } from "@inertiajs/vue3";
 import { ArrowLeft, Eye, Pencil, Plus, Trash2 } from "lucide-vue-next";
+import ConfirmModal from "@/Components/ConfirmModal.vue";
+import { ref } from "vue";
 
 const props = defineProps({
     system: Object,
     globalLogs: Array,
     logsByFeature: Object,
 });
+
+const page = usePage();
+const currentUrl = computed(() => page.url?.value ?? page.url ?? "");
 
 const avgProgress = computed(() => {
     const n = Number(props.system.features_avg_progress ?? 0);
@@ -96,22 +101,36 @@ const statusBadge = (status) => {
     };
 };
 
+const deleteConfirmOpen = ref(false);
+const deleteTarget = ref(null);
+
 const deleteFeature = (feature) => {
-    if (confirm(`Delete feature "${feature.title}"?`)) {
-        router.delete(
-            route("systems.features.destroy", [props.system.slug, feature.id])
-        );
-    }
+    deleteTarget.value = feature;
+    deleteConfirmOpen.value = true;
+};
+
+const confirmDelete = () => {
+    if (!deleteTarget.value) return;
+    router.delete(
+        route("systems.features.destroy", [props.system.slug, deleteTarget.value.id]),
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                deleteConfirmOpen.value = false;
+                deleteTarget.value = null;
+            },
+        }
+    );
 };
 </script>
 
 <template>
     <AuthenticatedLayout>
-        <div class="py-8">
+        <div class="py-4 sm:py-8">
             <div class="max-w-6xl mx-auto px-4 space-y-8">
                 <!-- SECTION 1: HEADER SYSTEM -->
                 <div
-                    class="flex flex-col md:flex-row md:items-start md:justify-between gap-4"
+                    class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"
                 >
                     <div class="space-y-1">
                         <div class="flex items-center gap-3 flex-wrap">
@@ -154,7 +173,7 @@ const deleteFeature = (feature) => {
                         </div>
                     </div>
 
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
                         <a
                             :href="route('systems.index')"
                             class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50 transition"
@@ -328,7 +347,9 @@ const deleteFeature = (feature) => {
                         </div>
                         <div class="flex items-center gap-2">
                             <a
-                                :href="route('logs.create', { system_id: system.id })"
+                                :href="
+                                    `${route('logs.create')}?return=${encodeURIComponent(currentUrl)}`
+                                "
                                 class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50 transition"
                                 title="Tambah log"
                                 aria-label="Tambah log"
@@ -360,7 +381,7 @@ const deleteFeature = (feature) => {
                             <a
                                 v-for="log in globalLogs"
                                 :key="log.id"
-                                :href="route('logs.show', log.id)"
+                                :href="`${route('logs.show', log.id)}?return=${encodeURIComponent(currentUrl)}`"
                                 class="block p-5 hover:bg-gray-50 transition"
                             >
                                 <div
@@ -435,7 +456,7 @@ const deleteFeature = (feature) => {
                                 <a
                                     v-for="log in group.logs"
                                     :key="log.id"
-                                    :href="route('logs.show', log.id)"
+                                    :href="`${route('logs.show', log.id)}?return=${encodeURIComponent(currentUrl)}`"
                                     class="block p-4 hover:bg-gray-50 transition"
                                 >
                                     <div
@@ -495,4 +516,24 @@ const deleteFeature = (feature) => {
             </div>
         </div>
     </AuthenticatedLayout>
+
+    <ConfirmModal
+        :show="deleteConfirmOpen"
+        title="Hapus feature?"
+        description="Tindakan ini tidak bisa dibatalkan."
+        confirmText="Ya, hapus"
+        cancelText="Batal"
+        tone="danger"
+        @close="deleteConfirmOpen = false"
+        @confirm="confirmDelete"
+    >
+        <div v-if="deleteTarget" class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div class="text-sm font-medium text-slate-900">
+                {{ deleteTarget.title }}
+            </div>
+            <div class="mt-1 text-xs text-slate-500">
+                System: {{ system.name }}
+            </div>
+        </div>
+    </ConfirmModal>
 </template>

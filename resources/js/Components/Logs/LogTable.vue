@@ -12,7 +12,7 @@ defineProps({
     logStatusLabel: Object,
 });
 
-const emit = defineEmits(["delete"]);
+const emit = defineEmits(["delete", "mark-done"]);
 </script>
 
 <template>
@@ -44,11 +44,16 @@ const emit = defineEmits(["delete"]);
                         :logStatusMap="logStatusMap"
                         :logStatusLabel="logStatusLabel"
                         @delete="emit('delete', $event)"
+                        @mark-done="emit('mark-done', $event)"
                     />
 
                     <tr v-if="logs.data.length === 0">
-                        <td colspan="8" class="p-6 text-center text-gray-400">
-                            No logs found.
+                        <td colspan="8" class="p-0">
+                            <slot name="empty">
+                                <div class="p-6 text-center text-gray-400">
+                                    No logs found.
+                                </div>
+                            </slot>
                         </td>
                     </tr>
                 </tbody>
@@ -56,8 +61,11 @@ const emit = defineEmits(["delete"]);
         </div>
 
         <!-- Pagination -->
-        <div class="p-4 border-t flex justify-between items-center text-sm">
-            <div>Showing {{ logs.from || 0 }} to {{ logs.to || 0 }}</div>
+        <div class="p-4 border-t flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 text-sm">
+            <div class="text-slate-600">
+                Showing {{ logs.from || 0 }} to {{ logs.to || 0 }} of
+                {{ logs.total || 0 }} logs
+            </div>
 
             <PaginationLinks :links="logs.links" />
         </div>

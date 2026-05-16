@@ -8,6 +8,12 @@ import html2canvas from "html2canvas";
 import ChartCard from "@/Components/Reports/ChartCard.vue";
 import { formatDayDate } from "@/Utils/datetime";
 import DateField from "@/Components/DateField.vue";
+import {
+    getBugFixMeetingStatus,
+    getProgressMeetingStatus,
+    getOperationalInsights,
+    getDerivedMetrics,
+} from "@/Utils/reportStatus";
 
 import {
     logTypeMap,
@@ -37,6 +43,11 @@ const reportRef = ref(null);
 const kpiRef = ref(null);
 const visualRef = ref(null);
 
+const systemPickerOpen = ref(false);
+const featurePickerOpen = ref(false);
+const systemSearch = ref("");
+const featureSearch = ref("");
+
 const form = reactive({
     start_date: props.filters?.start_date ?? "",
     end_date: props.filters?.end_date ?? "",
@@ -45,6 +56,9 @@ const form = reactive({
     types: props.filters?.types ?? ["progress", "bug", "fix"],
     view_mode: props.filters?.view_mode ?? "detail",
     report_view: !!props.filters?.report_view,
+    progress_status_period: !!props.filters?.progress_status_period,
+    completion_trend_period: !!props.filters?.completion_trend_period,
+    backlog_trend_period: !!props.filters?.backlog_trend_period,
 });
 
 const filenameSuffix = computed(() => {
@@ -155,18 +169,129 @@ const featureOptions = computed(() => {
     }));
 });
 
-const progressTrendChart = computed(() => {
-    const labels = props.charts?.progress_trend?.labels ?? [];
-    const data = props.charts?.progress_trend?.data ?? [];
+const selectedSystemName = computed(() => {
+    if (!form.system_id) return "Semua System";
+    const found = (props.systems ?? []).find((s) => String(s.id) === String(form.system_id));
+    return found?.name ?? "Semua System";
+});
+
+const selectedFeatureName = computed(() => {
+    if (!form.feature_id) return "Semua Feature";
+    const found = (featureOptions.value ?? []).find((f) => String(f.id) === String(form.feature_id));
+    return found?.optionLabel ?? "Semua Feature";
+});
+
+const systemPickerList = computed(() => {
+    const q = systemSearch.value.trim().toLowerCase();
+    const base = props.systems ?? [];
+    if (!q) return base;
+    return base.filter((s) => String(s.name || "").toLowerCase().includes(q));
+});
+
+const featurePickerList = computed(() => {
+    const q = featureSearch.value.trim().toLowerCase();
+    const base = featureOptions.value ?? [];
+    if (!q) return base;
+    return base.filter((f) => String(f.optionLabel || "").toLowerCase().includes(q));
+});
+
+const pickSystem = (id) => {
+    form.system_id = id || "";
+    form.feature_id = "";
+    systemPickerOpen.value = false;
+    systemSearch.value = "";
+    applyFilters();
+};
+
+const pickFeature = (id) => {
+    form.feature_id = id || "";
+    featurePickerOpen.value = false;
+    featureSearch.value = "";
+    applyFilters();
+};
+
+const progressStatusChart = computed(() => {
+    const onProgress = props.charts?.progress_status?.on_progress ?? 0;
+    const done = props.charts?.progress_status?.done ?? 0;
+
+    return {
+        labels: ["On Progress", "Done"],
+        datasets: [
+            {
+                data: [onProgress, done],
+                backgroundColor: [
+                    "rgba(175, 67, 36, 0.28)", // terracotta
+                    "rgba(34, 197, 94, 0.28)", // green
+                ],
+                borderColor: [
+                    "rgba(175, 67, 36, 0.85)",
+                    "rgba(34, 197, 94, 0.85)",
+                ],
+                borderWidth: 1,
+            },
+        ],
+    };
+});
+
+const impactDistributionChart = computed(() => {
+    const dist = props.charts?.impact_distribution ?? {};
+    const order = ["critical", "high", "medium", "low"];
+    const labels = [];
+    const data = [];
+    const colors = [];
+    const borders = [];
+
+    const add = (key, label, bg, border) => {
+        const v = Number(dist?.[key] ?? 0);
+        if (!v) return;
+        labels.push(label);
+        data.push(v);
+        colors.push(bg);
+        borders.push(border);
+    };
+
+    add("critical", "Critical", "rgba(239, 68, 68, 0.28)", "rgba(239, 68, 68, 0.85)");
+    add("high", "High", "rgba(249, 115, 22, 0.28)", "rgba(249, 115, 22, 0.85)");
+    add("medium", "Medium", "rgba(59, 130, 246, 0.22)", "rgba(59, 130, 246, 0.8)");
+    add("low", "Low", "rgba(148, 163, 184, 0.28)", "rgba(100, 116, 139, 0.85)");
+    // Show unknown only when it exists to avoid noise.
+    add("unknown", "Unknown", "rgba(100, 116, 139, 0.18)", "rgba(100, 116, 139, 0.7)");
 
     return {
         labels,
         datasets: [
             {
-                label: "Progress logs",
                 data,
-                borderColor: "#AF4324",
-                backgroundColor: "rgba(175, 67, 36, 0.15)",
+                backgroundColor: colors,
+                borderColor: borders,
+                borderWidth: 1,
+            },
+        ],
+    };
+});
+
+const completionTrendChart = computed(() => {
+    const labels = props.charts?.completion_trend?.labels ?? [];
+    const progressDone = props.charts?.completion_trend?.progress_done ?? [];
+    const fixResolved = props.charts?.completion_trend?.fix_resolved ?? [];
+
+    return {
+        labels,
+        datasets: [
+            {
+                label: "Progress Done",
+                data: progressDone,
+                borderColor: "rgba(34, 197, 94, 0.85)",
+                backgroundColor: "rgba(34, 197, 94, 0.12)",
+                tension: 0.35,
+                fill: true,
+                pointRadius: 2,
+            },
+            {
+                label: "Fix Resolved",
+                data: fixResolved,
+                borderColor: "rgba(175, 67, 36, 0.85)",
+                backgroundColor: "rgba(175, 67, 36, 0.10)",
                 tension: 0.35,
                 fill: true,
                 pointRadius: 2,
@@ -175,14 +300,34 @@ const progressTrendChart = computed(() => {
     };
 });
 
-const activityDayInsight = computed(() => {
-    const data = props.charts?.progress_trend?.data ?? [];
-    const labels = props.charts?.progress_trend?.labels ?? [];
-    if (!labels.length) return "";
-    const activeDays = (data || []).filter((v) => Number(v) > 0).length;
-    if (activeDays === 0) return "Belum ada aktivitas pada periode ini.";
-    if (activeDays === 1) return "Aktivitas hanya terjadi pada 1 hari dalam periode ini.";
-    return `Aktivitas terjadi pada ${activeDays} hari dalam periode ini.`;
+const backlogTrendChart = computed(() => {
+    const labels = props.charts?.open_backlog_trend?.labels ?? [];
+    const openBug = props.charts?.open_backlog_trend?.open_bug ?? [];
+    const openProgress = props.charts?.open_backlog_trend?.open_progress ?? [];
+
+    return {
+        labels,
+        datasets: [
+            {
+                label: "Open Bugs",
+                data: openBug,
+                borderColor: "rgba(239, 68, 68, 0.85)",
+                backgroundColor: "rgba(239, 68, 68, 0.10)",
+                tension: 0.35,
+                fill: true,
+                pointRadius: 2,
+            },
+            {
+                label: "Open Progress",
+                data: openProgress,
+                borderColor: "rgba(175, 67, 36, 0.85)",
+                backgroundColor: "rgba(175, 67, 36, 0.10)",
+                tension: 0.35,
+                fill: true,
+                pointRadius: 2,
+            },
+        ],
+    };
 });
 
 const bugVsFixChart = computed(() => {
@@ -238,6 +383,9 @@ const applyFilters = () => {
             types: form.types,
             view_mode: form.view_mode,
             report_view: form.report_view ? 1 : 0,
+            progress_status_period: form.progress_status_period ? 1 : 0,
+            completion_trend_period: form.completion_trend_period ? 1 : 0,
+            backlog_trend_period: form.backlog_trend_period ? 1 : 0,
         },
         { preserveScroll: true, preserveState: true, replace: true }
     );
@@ -257,30 +405,21 @@ const formatDate = (iso) => {
     return formatDayDate(iso) || "—";
 };
 
-const meetingStatus = computed(() => {
-    const bugRate = props.kpis?.bug_sla_on_time_rate ?? 0;
-    const openBugs = props.kpis?.open_bug_count ?? 0;
-    const bugLogs = props.kpis?.bug_logs ?? 0;
-    const fixLogs = props.kpis?.fix_logs ?? 0;
-    const slaLate = props.bug_summary?.late ?? 0;
+const bugFixMeetingStatus = computed(() =>
+    getBugFixMeetingStatus({ kpis: props.kpis, bug_summary: props.bug_summary, charts: props.charts })
+);
 
-    if (slaLate > 0 || bugRate < 70 || openBugs >= 10) {
-        return {
-            tone: "bg-red-50 border-red-200 text-red-800",
-            text: "🔴 Perlu perhatian pada SLA bug & backlog.",
-        };
-    }
-    if (bugLogs > fixLogs || bugRate < 85 || openBugs > 0) {
-        return {
-            tone: "bg-yellow-50 border-yellow-200 text-yellow-800",
-            text: "🟡 Ada keterlambatan minor yang perlu dipantau.",
-        };
-    }
-    return {
-        tone: "bg-green-50 border-green-200 text-green-800",
-        text: "🟢 Development berjalan baik.",
-    };
-});
+const progressMeetingStatus = computed(() =>
+    getProgressMeetingStatus({ kpis: props.kpis })
+);
+
+const operationalInsights = computed(() =>
+    getOperationalInsights({ kpis: props.kpis, bug_summary: props.bug_summary, charts: props.charts })
+);
+
+const derivedMetrics = computed(() =>
+    getDerivedMetrics({ kpis: props.kpis, bug_summary: props.bug_summary, charts: props.charts })
+);
 </script>
 
 <template>
@@ -299,7 +438,7 @@ const meetingStatus = computed(() => {
                 <div class="flex items-center gap-2">
                     <button
                         type="button"
-                        class="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+                        class="inline-flex items-center rounded-lg border border-[#AF4324]/30 bg-white px-3 py-2 text-sm font-medium text-[#AF4324] hover:bg-[#AF4324]/10 hover:border-[#AF4324]/50 transition disabled:opacity-50"
                         :disabled="exporting"
                         @click="exportSummaryPng"
                         data-export-ignore="true"
@@ -308,7 +447,7 @@ const meetingStatus = computed(() => {
                     </button>
                     <button
                         type="button"
-                        class="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+                        class="inline-flex items-center rounded-lg border border-[#AF4324]/30 bg-white px-3 py-2 text-sm font-medium text-[#AF4324] hover:bg-[#AF4324]/10 hover:border-[#AF4324]/50 transition disabled:opacity-50"
                         :disabled="exporting"
                         @click="exportVisualPng"
                         data-export-ignore="true"
@@ -317,7 +456,7 @@ const meetingStatus = computed(() => {
                     </button>
                     <button
                         type="button"
-                        class="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+                        class="inline-flex items-center rounded-lg border border-[#AF4324] bg-[#AF4324] px-3 py-2 text-sm font-medium text-white hover:opacity-95 transition disabled:opacity-50"
                         :disabled="exporting"
                         @click="exportPdf"
                         data-export-ignore="true"
@@ -329,8 +468,8 @@ const meetingStatus = computed(() => {
                         class="inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition"
                         :class="
                             form.report_view
-                                ? 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                                : 'border-slate-300 bg-slate-900 text-white'
+                                ? 'border-[#AF4324] bg-[#AF4324] text-white hover:opacity-95'
+                                : 'border-[#AF4324]/30 bg-white text-[#AF4324] hover:bg-[#AF4324]/10 hover:border-[#AF4324]/50'
                         "
                         @click="toggleReportView"
                         title="Toggle report view"
@@ -364,42 +503,33 @@ const meetingStatus = computed(() => {
                         <div class="text-xs font-medium text-slate-600">
                             System
                         </div>
-                        <select
-                            v-model="form.system_id"
-                            class="w-full rounded-lg border-slate-200 focus:border-slate-400 focus:ring-slate-200"
-                            @change="
-                                (form.feature_id = ''), applyFilters()
-                            "
+                        <button
+                            type="button"
+                            class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-900 hover:border-slate-300 transition"
+                            @click="systemPickerOpen = true"
                         >
-                            <option value="">All Systems</option>
-                            <option
-                                v-for="system in systems"
-                                :key="system.id"
-                                :value="system.id"
-                            >
-                                {{ system.name }}
-                            </option>
-                        </select>
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="truncate">{{ selectedSystemName }}</span>
+                                <span class="text-slate-400">⌄</span>
+                            </div>
+                        </button>
                     </div>
 
                     <div class="space-y-1">
                         <div class="text-xs font-medium text-slate-600">
                             Feature (optional)
                         </div>
-                        <select
-                            v-model="form.feature_id"
-                            class="w-full rounded-lg border-slate-200 focus:border-slate-400 focus:ring-slate-200"
-                            @change="applyFilters"
+                        <button
+                            type="button"
+                            class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-900 hover:border-slate-300 transition disabled:opacity-60"
+                            :disabled="(featureOptions ?? []).length === 0"
+                            @click="featurePickerOpen = true"
                         >
-                            <option value="">All Features</option>
-                            <option
-                                v-for="feature in featureOptions"
-                                :key="feature.id"
-                                :value="feature.id"
-                            >
-                                {{ feature.optionLabel }}
-                            </option>
-                        </select>
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="truncate">{{ selectedFeatureName }}</span>
+                                <span class="text-slate-400">⌄</span>
+                            </div>
+                        </button>
                     </div>
                 </div>
 
@@ -443,9 +573,10 @@ const meetingStatus = computed(() => {
                             />
                             {{ logTypeLabel.fix }}
                         </label>
+
                         <button
                             type="button"
-                            class="ml-2 inline-flex items-center rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                            class="ml-2 inline-flex items-center rounded-lg border border-[#AF4324] bg-[#AF4324] px-3 py-2 text-sm font-medium text-white hover:opacity-95 transition"
                             @click="applyFilters"
                         >
                             Apply
@@ -461,8 +592,8 @@ const meetingStatus = computed(() => {
                             class="rounded-lg border px-3 py-2 text-sm font-medium transition"
                             :class="
                                 form.view_mode === 'detail'
-                                    ? 'border-slate-300 bg-slate-900 text-white'
-                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                    ? 'border-[#AF4324] bg-[#AF4324] text-white'
+                                    : 'border-slate-200 text-slate-700 hover:bg-[#AF4324]/10 hover:border-[#AF4324]/40'
                             "
                             @click="setViewMode('detail')"
                         >
@@ -473,8 +604,8 @@ const meetingStatus = computed(() => {
                             class="rounded-lg border px-3 py-2 text-sm font-medium transition"
                             :class="
                                 form.view_mode === 'summary'
-                                    ? 'border-slate-300 bg-slate-900 text-white'
-                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                    ? 'border-[#AF4324] bg-[#AF4324] text-white'
+                                    : 'border-slate-200 text-slate-700 hover:bg-[#AF4324]/10 hover:border-[#AF4324]/40'
                             "
                             @click="setViewMode('summary')"
                         >
@@ -485,13 +616,173 @@ const meetingStatus = computed(() => {
                             class="rounded-lg border px-3 py-2 text-sm font-medium transition"
                             :class="
                                 form.view_mode === 'visual'
-                                    ? 'border-slate-300 bg-slate-900 text-white'
-                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                    ? 'border-[#AF4324] bg-[#AF4324] text-white'
+                                    : 'border-slate-200 text-slate-700 hover:bg-[#AF4324]/10 hover:border-[#AF4324]/40'
                             "
                             @click="setViewMode('visual')"
                         >
                             Visual
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Picker Modal -->
+            <div
+                v-if="systemPickerOpen"
+                class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+                @click.self="systemPickerOpen = false"
+            >
+                <div class="w-full max-w-xl rounded-2xl bg-white shadow-lg border border-slate-200 overflow-hidden">
+                    <div class="p-5 border-b flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-slate-900">
+                                Pilih System
+                            </div>
+                            <div class="text-xs text-slate-500 mt-0.5">
+                                Gunakan search untuk cepat menemukan system.
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 transition"
+                            @click="systemPickerOpen = false"
+                        >
+                            Tutup
+                        </button>
+                    </div>
+
+                    <div class="p-5">
+                        <input
+                            v-model="systemSearch"
+                            type="text"
+                            class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-[#AF4324] focus:ring-[#AF4324]/20"
+                            placeholder="Cari system..."
+                        />
+
+                        <div class="mt-4 max-h-[55vh] overflow-auto divide-y border rounded-xl">
+                            <button
+                                type="button"
+                                class="w-full text-left p-4 hover:bg-slate-50 transition"
+                                @click="pickSystem('')"
+                            >
+                                <div class="text-sm font-medium text-slate-900">
+                                    Semua System
+                                </div>
+                                <div class="text-xs text-slate-500 mt-0.5">
+                                    Tidak memfilter system.
+                                </div>
+                            </button>
+
+                            <button
+                                v-for="s in systemPickerList"
+                                :key="s.id"
+                                type="button"
+                                class="w-full text-left p-4 hover:bg-slate-50 transition"
+                                @click="pickSystem(s.id)"
+                            >
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-sm font-medium text-slate-900 truncate">
+                                            {{ s.name }}
+                                        </div>
+                                    </div>
+                                    <span
+                                        v-if="String(form.system_id) === String(s.id)"
+                                        class="text-xs font-semibold text-[#AF4324]"
+                                    >
+                                        Terpilih
+                                    </span>
+                                </div>
+                            </button>
+
+                            <div
+                                v-if="(systemPickerList ?? []).length === 0"
+                                class="p-6 text-center text-sm text-slate-500"
+                            >
+                                Tidak ada system yang cocok.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature Picker Modal -->
+            <div
+                v-if="featurePickerOpen"
+                class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+                @click.self="featurePickerOpen = false"
+            >
+                <div class="w-full max-w-xl rounded-2xl bg-white shadow-lg border border-slate-200 overflow-hidden">
+                    <div class="p-5 border-b flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-slate-900">
+                                Pilih Feature
+                            </div>
+                            <div class="text-xs text-slate-500 mt-0.5">
+                                {{ form.system_id ? `System: ${selectedSystemName}` : "Semua system" }}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 transition"
+                            @click="featurePickerOpen = false"
+                        >
+                            Tutup
+                        </button>
+                    </div>
+
+                    <div class="p-5">
+                        <input
+                            v-model="featureSearch"
+                            type="text"
+                            class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-[#AF4324] focus:ring-[#AF4324]/20"
+                            placeholder="Cari feature..."
+                        />
+
+                        <div class="mt-4 max-h-[55vh] overflow-auto divide-y border rounded-xl">
+                            <button
+                                type="button"
+                                class="w-full text-left p-4 hover:bg-slate-50 transition"
+                                @click="pickFeature('')"
+                            >
+                                <div class="text-sm font-medium text-slate-900">
+                                    Semua Feature
+                                </div>
+                                <div class="text-xs text-slate-500 mt-0.5">
+                                    Tidak memfilter feature.
+                                </div>
+                            </button>
+
+                            <button
+                                v-for="f in featurePickerList"
+                                :key="f.id"
+                                type="button"
+                                class="w-full text-left p-4 hover:bg-slate-50 transition"
+                                @click="pickFeature(f.id)"
+                            >
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-sm font-medium text-slate-900 truncate">
+                                            {{ f.optionLabel }}
+                                        </div>
+                                    </div>
+                                    <span
+                                        v-if="String(form.feature_id) === String(f.id)"
+                                        class="text-xs font-semibold text-[#AF4324]"
+                                    >
+                                        Terpilih
+                                    </span>
+                                </div>
+                            </button>
+
+                            <div
+                                v-if="(featurePickerList ?? []).length === 0"
+                                class="p-6 text-center text-sm text-slate-500"
+                            >
+                                Tidak ada feature yang cocok.
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -509,15 +800,11 @@ const meetingStatus = computed(() => {
                 <!-- KPI cards (always) -->
                 <div
                     ref="kpiRef"
-                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
                 >
                     <StatCard
                         label="Total Logs"
                         :value="kpis?.total_logs ?? 0"
-                    />
-                    <StatCard
-                        label="Progress Logs"
-                        :value="kpis?.progress_logs ?? 0"
                     />
                     <StatCard
                         label="Bug Logs"
@@ -528,6 +815,16 @@ const meetingStatus = computed(() => {
                         label="Fix Logs"
                         :value="kpis?.fix_logs ?? 0"
                         :hint="`SLA on-time: ${kpis?.bug_sla_on_time_rate ?? 0}%`"
+                    />
+                    <StatCard
+                        label="Completion Rate"
+                        :value="`${kpis?.completion_rate ?? 0}%`"
+                        :hint="`${kpis?.progress_done ?? 0} Done · ${bug_summary?.resolved_fix ?? 0} Fix resolved`"
+                    />
+                    <StatCard
+                        label="Progress Status"
+                        :value="kpis?.progress_logs ?? 0"
+                        :hint="`${kpis?.progress_on_progress ?? 0} On Progress, ${kpis?.progress_done ?? 0} Done`"
                     />
                 </div>
 
@@ -882,167 +1179,108 @@ const meetingStatus = computed(() => {
             <div v-else-if="form.view_mode === 'summary'" class="space-y-6">
                 <div
                     class="border rounded-lg p-5"
-                    :class="meetingStatus.tone"
+                    :class="bugFixMeetingStatus.tone"
                 >
-                    <div class="text-sm font-semibold">Status Ringkas</div>
+                    <div class="text-sm font-semibold">Status Ringkas (Bug & Fix)</div>
+                    <div class="mt-1 text-sm font-medium">
+                        {{ bugFixMeetingStatus.title }}
+                    </div>
                     <div class="mt-1 text-sm">
-                        {{ meetingStatus.text }}
+                        {{ bugFixMeetingStatus.text }}
+                    </div>
+                    <div class="mt-2 text-xs opacity-80">
+                        <span class="font-medium">{{ bugFixMeetingStatus.metrics?.bug_logs ?? 0 }}</span>
+                        Bug ·
+                        <span class="font-medium">{{ bugFixMeetingStatus.metrics?.fix_logs ?? 0 }}</span>
+                        Fix ·
+                        <span class="font-medium">{{ bugFixMeetingStatus.metrics?.open_bug_count ?? 0 }}</span>
+                        Open
+                        <span
+                            v-if="
+                                bugFixMeetingStatus.metrics?.sla_on_time_rate_pct !== null &&
+                                bugFixMeetingStatus.metrics?.sla_on_time_rate_pct !== undefined
+                            "
+                        >
+                            · SLA
+                            <span class="font-medium">
+                                {{ bugFixMeetingStatus.metrics?.sla_on_time_rate_pct ?? 0 }}%
+                            </span>
+                        </span>
+                    </div>
+                </div>
+
+                <div
+                    class="border rounded-lg p-5"
+                    :class="progressMeetingStatus.tone"
+                >
+                    <div class="text-sm font-semibold">Status Ringkas (Progress)</div>
+                    <div class="mt-1 text-sm font-medium">
+                        {{ progressMeetingStatus.title }}
+                    </div>
+                    <div class="mt-1 text-sm">
+                        {{ progressMeetingStatus.text }}
+                    </div>
+                    <div class="mt-2 text-xs opacity-80">
+                        <span class="font-medium">{{ progressMeetingStatus.metrics?.progress_logs ?? 0 }}</span>
+                        Progress ·
+                        <span class="font-medium">{{ progressMeetingStatus.metrics?.progress_on_progress ?? 0 }}</span>
+                        On Progress ·
+                        <span class="font-medium">{{ progressMeetingStatus.metrics?.progress_done ?? 0 }}</span>
+                        Done
+                        <span
+                            v-if="
+                                progressMeetingStatus.metrics?.completion_rate_pct !== null &&
+                                progressMeetingStatus.metrics?.completion_rate_pct !== undefined
+                            "
+                        >
+                            · Completion
+                            <span class="font-medium">
+                                {{ progressMeetingStatus.metrics?.completion_rate_pct ?? 0 }}%
+                            </span>
+                        </span>
                     </div>
                 </div>
 
                 <div class="border border-slate-200 rounded-lg p-5 space-y-4">
                     <div class="text-sm font-semibold text-slate-900">
-                        Highlight
+                        Operational Insights
                     </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div class="rounded-lg border border-slate-200 p-4">
-                            <div
-                                class="text-xs font-semibold text-slate-700"
-                            >
-                                Fix Terlambat (SLA)
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div
+                            v-for="item in operationalInsights"
+                            :key="item.key"
+                            class="rounded-lg border p-4"
+                            :class="item.tone"
+                        >
+                            <div class="text-xs font-semibold opacity-80">
+                                {{ item.title }}
                             </div>
-                            <ul class="mt-2 space-y-2 text-sm">
-                                <li
-                                    v-for="log in highlights?.late_fixes ?? []"
-                                    :key="log.id"
-                                    class="text-slate-800"
-                                >
-                                    <div class="font-medium break-words">
-                                        {{ log.title }}
-                                    </div>
-                                    <div class="text-xs text-slate-500">
-                                        SLA: {{ log.sla_days ?? "—" }}d · Took:
-                                        {{ log.duration_days ?? "—" }}d
-                                    </div>
-                                </li>
-                                <li
-                                    v-if="
-                                        (highlights?.late_fixes ?? [])
-                                            .length === 0
-                                    "
-                                    class="text-slate-500"
-                                >
-                                    Tidak ada fix yang terlambat SLA.
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div class="rounded-lg border border-slate-200 p-4">
-                            <div
-                                class="text-xs font-semibold text-slate-700"
-                            >
-                                Bug Open
+                            <div class="mt-1 text-sm">
+                                {{ item.text }}
                             </div>
-                            <ul class="mt-2 space-y-2 text-sm">
-                                <li
-                                    v-for="log in highlights?.open_bugs ?? []"
-                                    :key="log.id"
-                                    class="text-slate-800"
-                                >
-                                    <div class="font-medium break-words">
-                                        {{ log.title }}
-                                    </div>
-                                    <div class="text-xs text-slate-500">
-                                        {{
-                                            log.impact
-                                                ? impactLabel[log.impact] ??
-                                                  log.impact
-                                                : "—"
-                                        }}
-                                        · {{ log.system_name ?? "—" }}
-                                        · {{ formatDate(log.logged_at) }}
-                                    </div>
-                                </li>
-                                <li
-                                    v-if="
-                                        (highlights?.open_bugs ?? [])
-                                            .length === 0
-                                    "
-                                    class="text-slate-500"
-                                >
-                                    Tidak ada bug open.
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div class="rounded-lg border border-slate-200 p-4">
-                            <div
-                                class="text-xs font-semibold text-slate-700"
-                            >
-                                Fix Terbaru (Resolved)
-                            </div>
-                            <ul class="mt-2 space-y-2 text-sm">
-                                <li
-                                    v-for="log in highlights?.recent_fix ?? []"
-                                    :key="log.id"
-                                    class="text-slate-800"
-                                >
-                                    <div class="font-medium break-words">
-                                        {{ log.title }}
-                                    </div>
-                                    <div class="text-xs text-slate-500">
-                                        Resolved:
-                                        {{ formatDate(log.resolved_at) }}
-                                        ·
-                                        {{
-                                            log.sla_on_time === true
-                                                ? "On Time"
-                                                : log.sla_on_time === false
-                                                ? "Late"
-                                                : "—"
-                                        }}
-                                    </div>
-                                </li>
-                                <li
-                                    v-if="
-                                        (highlights?.recent_fix ?? [])
-                                            .length === 0
-                                    "
-                                    class="text-slate-500"
-                                >
-                                    Tidak ada fix yang resolved.
-                                </li>
-                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <div class="border border-slate-200 rounded-lg p-5">
                     <div class="text-sm font-semibold text-slate-900">
-                        Metrik Kunci
+                        Operational Metrics
                     </div>
-                    <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div>
-                            <div class="text-2xl font-semibold text-slate-900">
-                                {{ kpis?.total_logs ?? 0 }}
+                    <div class="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div
+                            v-for="m in derivedMetrics"
+                            :key="m.key"
+                            class="rounded-lg border border-slate-200 bg-white p-4"
+                        >
+                            <div class="text-xs font-semibold text-slate-700">
+                                {{ m.label }}
                             </div>
-                            <div class="text-sm text-slate-500">
-                                Total Logs
+                            <div class="mt-1 text-xl font-semibold" :class="m.tone ?? 'text-slate-900'">
+                                {{ m.value }}
                             </div>
-                        </div>
-                        <div>
-                            <div class="text-2xl font-semibold text-slate-900">
-                                {{ kpis?.progress_logs ?? 0 }}
-                            </div>
-                            <div class="text-sm text-slate-500">
-                                Progress Logs
-                            </div>
-                        </div>
-                        <div>
-                            <div class="text-2xl font-semibold text-slate-900">
-                                {{ kpis?.bug_logs ?? 0 }}
-                            </div>
-                            <div class="text-sm text-slate-500">
-                                Bug Logs
-                            </div>
-                        </div>
-                        <div>
-                            <div class="text-2xl font-semibold text-slate-900">
-                                {{ kpis?.fix_logs ?? 0 }}
-                            </div>
-                            <div class="text-sm text-slate-500">
-                                Fix Logs
+                            <div v-if="m.hint" class="mt-1 text-xs text-slate-500">
+                                {{ m.hint }}
                             </div>
                         </div>
                     </div>
@@ -1051,24 +1289,11 @@ const meetingStatus = computed(() => {
 
             <!-- VISUAL MODE -->
             <div v-else ref="visualRef" class="space-y-6">
+                <!-- Row 2 -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <ChartCard
-                        title="Progress Trend"
-                        subtitle="Jumlah log progress per hari."
-                        type="line"
-                        :data="progressTrendChart"
-                        :options="{
-                            scales: {
-                                x: { grid: { display: false } },
-                                y: { beginAtZero: true, ticks: { precision: 0 } },
-                            },
-                        }"
-                        :height="260"
-                    />
-
-                    <ChartCard
                         title="Bug vs Fix"
-                        subtitle="Jumlah log pada periode terpilih."
+                        subtitle="Issue vs resolution ratio pada periode terpilih."
                         type="bar"
                         :data="bugVsFixChart"
                         :options="{
@@ -1079,23 +1304,118 @@ const meetingStatus = computed(() => {
                         }"
                         :height="260"
                     />
+
+                    <ChartCard
+                        title="Bug SLA On-Time vs Late"
+                        subtitle="Fix resolved pada periode terpilih."
+                        type="doughnut"
+                        :data="bugSlaOnTimeChart"
+                        :options="{ cutout: '65%' }"
+                        :height="260"
+                    />
                 </div>
 
+                <!-- Row 3 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <ChartCard
+                        title="Progress Status Distribution"
+                        subtitle="Kondisi pekerjaan (done vs on progress)."
+                        type="doughnut"
+                        :data="progressStatusChart"
+                        :options="{ cutout: '65%' }"
+                        :height="260"
+                    >
+                        <template #actions>
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-600"
+                                title="Jika aktif, mengikuti periode filter. Jika tidak, memakai data keseluruhan."
+                                data-export-ignore="true"
+                            >
+                                <input
+                                    type="checkbox"
+                                    v-model="form.progress_status_period"
+                                    class="rounded border-slate-300 text-[#AF4324] focus:ring-[#AF4324]/20"
+                                    @change="applyFilters"
+                                />
+                                Ikuti periode
+                            </label>
+                        </template>
+                    </ChartCard>
+
+                    <ChartCard
+                        title="Issue Impact Distribution"
+                        subtitle="Distribusi severity bug pada periode terpilih."
+                        type="doughnut"
+                        :data="impactDistributionChart"
+                        :options="{ cutout: '65%' }"
+                        :height="260"
+                    />
+                </div>
+
+                <!-- Row 4 -->
                 <ChartCard
-                    title="Bug SLA On-Time vs Late"
-                    subtitle="Fix resolved pada periode terpilih."
-                    type="doughnut"
-                    :data="bugSlaOnTimeChart"
-                    :options="{ cutout: '65%' }"
-                    :height="260"
-                />
+                    title="Completion Trend"
+                    subtitle="Jumlah pekerjaan selesai per hari (tidak kumulatif)."
+                    type="line"
+                    :data="completionTrendChart"
+                    :options="{
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { precision: 0 } },
+                        },
+                    }"
+                    :height="280"
+                >
+                    <template #actions>
+                        <label
+                            class="inline-flex items-center gap-2 text-xs text-slate-600"
+                            title="Jika aktif, hanya menghitung completion dari log di periode filter. Jika tidak, tetap per hari dalam rentang tanggal yang dipilih, tetapi memakai data keseluruhan (snapshot)."
+                            data-export-ignore="true"
+                        >
+                            <input
+                                type="checkbox"
+                                v-model="form.completion_trend_period"
+                                class="rounded border-slate-300 text-[#AF4324] focus:ring-[#AF4324]/20"
+                                @change="applyFilters"
+                            />
+                            Ikuti periode
+                        </label>
+                    </template>
+                </ChartCard>
 
-                <div v-if="activityDayInsight" class="text-sm text-slate-600">
-                    {{ activityDayInsight }}
-                </div>
+                <!-- Row 5 -->
+                <ChartCard
+                    title="Open Issue Backlog Trend"
+                    subtitle="Perubahan backlog dari waktu ke waktu (kumulatif)."
+                    type="line"
+                    :data="backlogTrendChart"
+                    :options="{
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { precision: 0 } },
+                        },
+                    }"
+                    :height="280"
+                >
+                    <template #actions>
+                        <label
+                            class="inline-flex items-center gap-2 text-xs text-slate-600"
+                            title="Jika aktif, hanya perubahan backlog pada periode ini (mulai dari 0). Jika tidak, termasuk backlog sebelum periode."
+                            data-export-ignore="true"
+                        >
+                            <input
+                                type="checkbox"
+                                v-model="form.backlog_trend_period"
+                                class="rounded border-slate-300 text-[#AF4324] focus:ring-[#AF4324]/20"
+                                @change="applyFilters"
+                            />
+                            Ikuti periode
+                        </label>
+                    </template>
+                </ChartCard>
 
                 <div
-                    v-if="(charts?.progress_trend?.labels ?? []).length === 0"
+                    v-if="(kpis?.total_logs ?? 0) === 0"
                     class="text-sm text-slate-500"
                 >
                     Belum ada aktivitas pada periode ini.

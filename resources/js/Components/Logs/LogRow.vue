@@ -1,9 +1,9 @@
 <script setup>
 import Badge from "@/Components/Badge.vue";
 import { computed } from "vue";
-import { router } from "@inertiajs/vue3";
+import { router, usePage } from "@inertiajs/vue3";
 import { timeAgo } from "@/Utils/datetime";
-import { Eye, Pencil, Trash2 } from "lucide-vue-next";
+import { Eye, Pencil, Trash2, CheckCircle2 } from "lucide-vue-next";
 
 const props = defineProps({
     log: Object,
@@ -15,7 +15,10 @@ const props = defineProps({
     logStatusLabel: Object,
 });
 
-const emit = defineEmits(["delete"]);
+const emit = defineEmits(["delete", "mark-done"]);
+
+const page = usePage();
+const currentUrl = computed(() => page.url?.value ?? page.url ?? "");
 
 const impactBadge = computed(() => {
     if (!props.log.impact) {
@@ -43,8 +46,17 @@ const deleteLog = () => {
     emit("delete", props.log.id);
 };
 
+const markDone = () => {
+    emit("mark-done", props.log);
+};
+
 const openLog = () => {
-    router.visit(route("logs.show", props.log.id));
+    const url = currentUrl.value
+        ? `${route("logs.show", props.log.id)}?return=${encodeURIComponent(
+              currentUrl.value
+          )}`
+        : route("logs.show", props.log.id);
+    router.visit(url);
 };
 </script>
 
@@ -120,9 +132,24 @@ const openLog = () => {
 
         <td class="p-4 text-right w-32 whitespace-nowrap" @click.stop>
             <div class="flex items-center justify-end gap-2">
+                <button
+                    v-if="log.type === 'progress' && log.status === 'on_progress'"
+                    type="button"
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[#AF4324] hover:bg-[#AF4324]/10 transition"
+                    title="Mark as Done"
+                    aria-label="Mark as Done"
+                    @click="markDone"
+                >
+                    <CheckCircle2 class="h-4 w-4" />
+                </button>
+
                 <a
-                    :href="route('logs.show', log.id)"
-                    class="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+                    :href="
+                        currentUrl
+                            ? `${route('logs.show', log.id)}?return=${encodeURIComponent(currentUrl)}`
+                            : route('logs.show', log.id)
+                    "
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
                     title="View"
                     aria-label="View"
                 >
@@ -130,8 +157,12 @@ const openLog = () => {
                 </a>
 
                 <a
-                    :href="route('logs.edit', log.id)"
-                    class="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+                    :href="
+                        currentUrl
+                            ? `${route('logs.edit', log.id)}?return=${encodeURIComponent(currentUrl)}`
+                            : route('logs.edit', log.id)
+                    "
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
                     title="Edit"
                     aria-label="Edit"
                 >
@@ -140,7 +171,7 @@ const openLog = () => {
 
                 <button
                     @click="deleteLog"
-                    class="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-red-50 hover:text-red-700 transition"
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-700 transition"
                     title="Delete"
                     aria-label="Delete"
                 >

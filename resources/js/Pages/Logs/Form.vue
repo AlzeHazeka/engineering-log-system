@@ -19,6 +19,7 @@ const props = defineProps({
     log: { type: Object, default: null },
     submitUrl: String,
     method: { type: String, default: "post" }, // post | put
+    returnUrl: { type: String, default: null },
 });
 
 const isEdit = computed(() => !!props.log);
@@ -241,6 +242,47 @@ watch(
 const referenceModalOpen = ref(false);
 const referenceSearch = ref("");
 
+const systemPickerOpen = ref(false);
+const featurePickerOpen = ref(false);
+const systemSearch = ref("");
+const featureSearch = ref("");
+
+const systemPickerList = computed(() => {
+    const q = systemSearch.value.trim().toLowerCase();
+    const list = props.systems ?? [];
+    if (!q) return list;
+    return list.filter((s) => String(s.name || "").toLowerCase().includes(q));
+});
+
+const featurePickerList = computed(() => {
+    if (!selectedSystem.value) return [];
+    let list = selectedSystem.value.features || [];
+    const q = featureSearch.value.trim().toLowerCase();
+    if (q) {
+        list = list.filter((f) =>
+            String(f.title || "").toLowerCase().includes(q)
+        );
+    }
+    return list;
+});
+
+const selectedFeature = computed(() => {
+    if (!selectedSystem.value || !form.feature_id) return null;
+    return (selectedSystem.value.features || []).find(
+        (f) => String(f.id) === String(form.feature_id)
+    );
+});
+
+const pickSystem = (id) => {
+    form.system_id = id ? String(id) : "";
+    systemPickerOpen.value = false;
+};
+
+const pickFeature = (id) => {
+    form.feature_id = id ? String(id) : "";
+    featurePickerOpen.value = false;
+};
+
 const referenceCandidates = computed(() => {
     if (!form.system_id) return [];
 
@@ -309,6 +351,20 @@ watch(
     }
 );
 
+watch(
+    () => systemPickerOpen.value,
+    (open) => {
+        if (open) systemSearch.value = "";
+    }
+);
+
+watch(
+    () => featurePickerOpen.value,
+    (open) => {
+        if (open) featureSearch.value = "";
+    }
+);
+
 const submit = () => {
     if (props.method === "put") {
         form.put(props.submitUrl);
@@ -320,7 +376,7 @@ const submit = () => {
 </script>
 
 <template>
-    <div class="bg-white rounded-xl shadow-sm border p-6 space-y-6">
+    <div class="bg-white rounded-xl shadow-sm border p-4 sm:p-6 space-y-6">
         <div>
             <h2 class="text-xl font-semibold text-gray-900">
                 {{ isEdit ? "Edit Log" : "Create Log" }}
@@ -333,19 +389,16 @@ const submit = () => {
         <!-- System -->
         <div>
             <label class="block text-sm text-gray-500 mb-1">System</label>
-            <select
-                v-model="form.system_id"
-                class="w-full border rounded-lg px-4 py-2"
+            <button
+                type="button"
+                class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm focus:border-[#AF4324] focus:ring-[#AF4324]/20 disabled:opacity-50"
+                @click="systemPickerOpen = true"
             >
-                <option value="">Select System</option>
-                <option
-                    v-for="system in systems"
-                    :key="system.id"
-                    :value="system.id"
-                >
-                    {{ system.name }}
-                </option>
-            </select>
+                <span v-if="selectedSystem" class="text-slate-900">
+                    {{ selectedSystem.name }}
+                </span>
+                <span v-else class="text-slate-400">Pilih system</span>
+            </button>
             <div v-if="form.errors.system_id" class="text-sm text-red-600 mt-1">
                 {{ form.errors.system_id }}
             </div>
@@ -365,20 +418,20 @@ const submit = () => {
                         {{ form.feature_id ? "Feature Log" : "Global Log" }}
                     </span>
                 </div>
-                <select
-                    v-model="form.feature_id"
-                    class="w-full border rounded-lg px-4 py-2"
+                <button
+                    type="button"
+                    class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm focus:border-[#AF4324] focus:ring-[#AF4324]/20 disabled:opacity-50"
                     :disabled="!form.system_id"
+                    @click="featurePickerOpen = true"
                 >
-                    <option value="">No Feature</option>
-                    <option
-                        v-for="feature in availableFeatures"
-                        :key="feature.id"
-                        :value="feature.id"
+                    <span v-if="!form.system_id" class="text-slate-400"
+                        >Pilih system dulu</span
                     >
-                        {{ feature.title }}
-                    </option>
-                </select>
+                    <span v-else-if="selectedFeature" class="text-slate-900">
+                        {{ selectedFeature.title }}
+                    </span>
+                    <span v-else class="text-slate-400">Global (tanpa feature)</span>
+                </button>
                 <div
                     v-if="form.errors.feature_id"
                     class="text-sm text-red-600 mt-1"
@@ -573,18 +626,202 @@ const submit = () => {
         </div>
 
         <!-- Actions -->
-        <div class="flex justify-end gap-3 pt-2">
-            <a :href="route('logs.index')" class="px-4 py-2 rounded-lg border">
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <a
+                :href="returnUrl || route('logs.index')"
+                class="w-full sm:w-auto px-4 py-2 rounded-lg border text-center"
+            >
                 Cancel
             </a>
 
             <button
                 @click="submit"
-                class="bg-black text-white px-6 py-2 rounded-lg"
+                class="w-full sm:w-auto bg-black text-white px-6 py-2 rounded-lg"
                 :disabled="form.processing"
             >
                 {{ isEdit ? "Update Log" : "Save Log" }}
             </button>
+        </div>
+    </div>
+
+    <!-- System Picker Modal -->
+    <div
+        v-if="systemPickerOpen"
+        class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+        @click.self="systemPickerOpen = false"
+    >
+        <div
+            class="w-full max-w-xl rounded-2xl bg-white shadow-lg border border-slate-200 overflow-hidden"
+        >
+            <div class="p-5 border-b flex items-center justify-between">
+                <div>
+                    <div class="text-sm font-semibold text-slate-900">
+                        Pilih System
+                    </div>
+                    <div class="text-xs text-slate-500 mt-0.5">
+                        Gunakan search untuk cepat menemukan system.
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 transition"
+                    @click="systemPickerOpen = false"
+                >
+                    Tutup
+                </button>
+            </div>
+
+            <div class="p-5">
+                <input
+                    v-model="systemSearch"
+                    type="text"
+                    class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-[#AF4324] focus:ring-[#AF4324]/20"
+                    placeholder="Cari system..."
+                />
+
+                <div
+                    class="mt-4 max-h-[55vh] overflow-auto divide-y border rounded-xl"
+                >
+                    <button
+                        v-for="s in systemPickerList"
+                        :key="s.id"
+                        type="button"
+                        class="w-full text-left p-4 hover:bg-slate-50 transition"
+                        @click="pickSystem(s.id)"
+                    >
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div
+                                    class="text-sm font-medium text-slate-900 truncate"
+                                >
+                                    {{ s.name }}
+                                </div>
+                            </div>
+                            <span
+                                v-if="String(form.system_id) === String(s.id)"
+                                class="text-xs font-semibold text-[#AF4324]"
+                            >
+                                Terpilih
+                            </span>
+                        </div>
+                    </button>
+
+                    <div
+                        v-if="(systemPickerList ?? []).length === 0"
+                        class="p-6 text-center text-sm text-slate-500"
+                    >
+                        Tidak ada system yang cocok.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Picker Modal -->
+    <div
+        v-if="featurePickerOpen"
+        class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+        @click.self="featurePickerOpen = false"
+    >
+        <div
+            class="w-full max-w-xl rounded-2xl bg-white shadow-lg border border-slate-200 overflow-hidden"
+        >
+            <div class="p-5 border-b flex items-center justify-between">
+                <div>
+                    <div class="text-sm font-semibold text-slate-900">
+                        Pilih Feature
+                    </div>
+                    <div class="text-xs text-slate-500 mt-0.5">
+                        {{ selectedSystem ? `System: ${selectedSystem.name}` : "Pilih system dulu." }}
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 transition"
+                    @click="featurePickerOpen = false"
+                >
+                    Tutup
+                </button>
+            </div>
+
+            <div class="p-5">
+                <input
+                    v-model="featureSearch"
+                    type="text"
+                    class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-[#AF4324] focus:ring-[#AF4324]/20"
+                    placeholder="Cari feature..."
+                    :disabled="!selectedSystem"
+                />
+
+                <div
+                    class="mt-4 max-h-[55vh] overflow-auto divide-y border rounded-xl"
+                >
+                    <button
+                        type="button"
+                        class="w-full text-left p-4 hover:bg-slate-50 transition"
+                        @click="pickFeature('')"
+                        :disabled="!selectedSystem"
+                    >
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div
+                                    class="text-sm font-medium text-slate-900 truncate"
+                                >
+                                    Global (tanpa feature)
+                                </div>
+                                <div class="text-xs text-slate-500 mt-0.5">
+                                    Log tidak terikat ke feature.
+                                </div>
+                            </div>
+                            <span
+                                v-if="!form.feature_id"
+                                class="text-xs font-semibold text-[#AF4324]"
+                            >
+                                Terpilih
+                            </span>
+                        </div>
+                    </button>
+
+                    <button
+                        v-for="f in featurePickerList"
+                        :key="f.id"
+                        type="button"
+                        class="w-full text-left p-4 hover:bg-slate-50 transition disabled:opacity-50"
+                        @click="pickFeature(f.id)"
+                        :disabled="!selectedSystem"
+                    >
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div
+                                    class="text-sm font-medium text-slate-900 truncate"
+                                >
+                                    {{ f.title }}
+                                </div>
+                            </div>
+                            <span
+                                v-if="String(form.feature_id) === String(f.id)"
+                                class="text-xs font-semibold text-[#AF4324]"
+                            >
+                                Terpilih
+                            </span>
+                        </div>
+                    </button>
+
+                    <div
+                        v-if="selectedSystem && (featurePickerList ?? []).length === 0"
+                        class="p-6 text-center text-sm text-slate-500"
+                    >
+                        Tidak ada feature yang cocok.
+                    </div>
+
+                    <div
+                        v-if="!selectedSystem"
+                        class="p-6 text-center text-sm text-slate-500"
+                    >
+                        Pilih system terlebih dahulu.
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

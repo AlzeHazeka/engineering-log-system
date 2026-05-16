@@ -23,6 +23,9 @@ class ReportController extends Controller
             'types.*' => ['in:progress,bug,fix'],
             'view_mode' => ['nullable', 'in:detail,summary,visual'],
             'report_view' => ['nullable', 'boolean'],
+            'progress_status_period' => ['nullable', 'boolean'],
+            'completion_trend_period' => ['nullable', 'boolean'],
+            'backlog_trend_period' => ['nullable', 'boolean'],
         ]);
 
         $startAt = isset($validated['start_date'])
@@ -38,6 +41,9 @@ class ReportController extends Controller
         $types = $validated['types'] ?? ['progress', 'bug', 'fix'];
         $viewMode = $validated['view_mode'] ?? 'detail';
         $reportView = (bool) ($validated['report_view'] ?? false);
+        $progressStatusPeriod = (bool) ($validated['progress_status_period'] ?? false);
+        $completionTrendPeriod = (bool) ($validated['completion_trend_period'] ?? false);
+        $backlogTrendPeriod = (bool) ($validated['backlog_trend_period'] ?? false);
 
         // Filter dropdown data
         $systems = System::query()
@@ -98,6 +104,16 @@ class ReportController extends Controller
         $progressCount = $logs->where('type', 'progress')->count();
         $bugCount = $logs->where('type', 'bug')->count();
         $fixCount = $logs->where('type', 'fix')->count();
+
+        $progressOnProgressCount = $logs
+            ->where('type', 'progress')
+            ->where('status', 'on_progress')
+            ->count();
+
+        $progressDoneCount = $logs
+            ->where('type', 'progress')
+            ->where('status', 'done')
+            ->count();
 
         $resolvedBugCount = $logs
             ->where('type', 'bug')
@@ -190,7 +206,27 @@ class ReportController extends Controller
                 'impact' => $log->impact,
             ]);
 
-        // Chart data
+        // Chart data scopes (per chart):
+        // - *_period=false: overall snapshot (ignores date range where meaningful)
+        // - *_period=true: follow selected period
+
+        $includeProgress = in_array('progress', $types, true);
+        $includeBug = in_array('bug', $types, true);
+        $includeFix = in_array('fix', $types, true);
+
+        $overallLogs = Log::query()
+            ->with([
+                'system:id,name',
+                'feature:id,system_id,title',
+                'references:id,type,impact,logged_at,title',
+            ])
+            ->when($systemId, fn ($q) => $q->where('system_id', $systemId))
+            ->when($featureId, fn ($q) => $q->where('feature_id', $featureId))
+            ->when(count($types) === 0, fn ($q) => $q->whereRaw('1=0'))
+            ->when(count($types) > 0, fn ($q) => $q->whereIn('type', $types))
+            ->get();
+
+        // Date labels always follow selected period (keeps charts readable)
         $dates = [];
         $cursor = $startAt->copy()->startOfDay();
         while ($cursor->lte($endAt)) {
@@ -198,14 +234,116 @@ class ReportController extends Controller
             $cursor->addDay();
         }
 
-        $progressGrouped = $logs
+        $progressStatusBase = $progressStatusPeriod ? $logs : $overallLogs;
+        $progressStatus = [
+            'on_progress' => $progressStatusBase->where('type', 'progress')->where('status', 'on_progress')->count(),
+            'done' => $progressStatusBase->where('type', 'progress')->where('status', 'done')->count(),
+        ];
+
+        // Impact distribution stays period-based by design (managerial for selected timeframe)
+        $bugImpact = $logs
+            ->where('type', 'bug')
+            ->groupBy(fn (Log $log) => $log->impact ?: 'unknown')
+            ->map(fn ($items) => $items->count());
+
+        $impactDistribution = collect(['low', 'medium', 'high', 'critical', 'unknown'])
+            ->mapWithKeys(fn ($k) => [$k => (int) ($bugImpact[$k] ?? 0)])
+            ->all();
+
+        // Completion Trend: split series (progress done vs fix resolved) per day.
+        // NOTE: This is *not* cumulative. Each day shows the number of completions
+        // on that date. So a future period with no activity stays at zero.
+        // Toggle:
+        // - period=true  -> use filtered logs (selected period)
+        // - period=false -> use overall logs, but still only count events within the selected period range
+        $completionBase = $completionTrendPeriod ? $logs : $overallLogs;
+        $completionInPeriod = $completionBase
+            ->filter(fn (Log $l) => $l->logged_at && $l->logged_at->between($startAt, $endAt));
+
+        $progressDoneByDay = $completionInPeriod
             ->where('type', 'progress')
+            ->where('status', 'done')
             ->groupBy(fn (Log $log) => optional($log->logged_at)->format('Y-m-d'))
             ->map(fn ($items) => $items->count());
 
-        $progressTrend = collect($dates)
-            ->map(fn ($d) => (int) ($progressGrouped[$d] ?? 0))
+        $fixResolvedByDay = $completionInPeriod
+            ->where('type', 'fix')
+            ->where('status', 'resolved')
+            ->groupBy(fn (Log $log) => optional($log->logged_at)->format('Y-m-d'))
+            ->map(fn ($items) => $items->count());
+
+        $completionProgressSeries = collect($dates)
+            ->map(fn ($d) => $includeProgress ? (int) ($progressDoneByDay[$d] ?? 0) : 0)
             ->values();
+
+        $completionFixSeries = collect($dates)
+            ->map(fn ($d) => $includeFix ? (int) ($fixResolvedByDay[$d] ?? 0) : 0)
+            ->values();
+
+        // Backlog Trend: split series (open bugs vs open progress), cumulative
+        // Default (period=false): includes initial open backlog before startAt.
+        // period=true: starts from 0 (only changes during the selected period).
+        $backlogBase = $backlogTrendPeriod ? $logs : $overallLogs;
+        $backlogInPeriod = $backlogBase
+            ->filter(fn (Log $l) => $l->logged_at && $l->logged_at->between($startAt, $endAt));
+
+        $bugsCreatedByDay = $backlogInPeriod
+            ->where('type', 'bug')
+            ->groupBy(fn (Log $log) => optional($log->logged_at)->format('Y-m-d'))
+            ->map(fn ($items) => $items->count());
+
+        $progressStartedByDay = $backlogInPeriod
+            ->where('type', 'progress')
+            ->where('status', 'on_progress')
+            ->groupBy(fn (Log $log) => optional($log->logged_at)->format('Y-m-d'))
+            ->map(fn ($items) => $items->count());
+
+        $initialBugBacklog = 0;
+        $initialProgressBacklog = 0;
+
+        // For backlog initial state, we use DB counts (fast) and switch scope by analyticsPeriod.
+        if (!$backlogTrendPeriod && $includeBug) {
+            $initialBugBacklog = Log::query()
+                ->where('type', 'bug')
+                ->where('status', 'open')
+                ->where('logged_at', '<', $startAt)
+                ->when($systemId, fn ($q) => $q->where('system_id', $systemId))
+                ->when($featureId, fn ($q) => $q->where('feature_id', $featureId))
+                ->count();
+        }
+
+        if (!$backlogTrendPeriod && $includeProgress) {
+            $initialProgressBacklog = Log::query()
+                ->where('type', 'progress')
+                ->where('status', 'on_progress')
+                ->where('logged_at', '<', $startAt)
+                ->when($systemId, fn ($q) => $q->where('system_id', $systemId))
+                ->when($featureId, fn ($q) => $q->where('feature_id', $featureId))
+                ->count();
+        }
+
+        $bugBacklogTrend = [];
+        $progressBacklogTrend = [];
+        $bugBacklog = $initialBugBacklog;
+        $progressBacklog = $initialProgressBacklog;
+
+        foreach ($dates as $d) {
+            $createdBug = $includeBug ? (int) ($bugsCreatedByDay[$d] ?? 0) : 0;
+            $createdProgress = $includeProgress ? (int) ($progressStartedByDay[$d] ?? 0) : 0;
+            $completedFix = $includeFix ? (int) ($fixResolvedByDay[$d] ?? 0) : 0;
+            $completedProgress = $includeProgress ? (int) ($progressDoneByDay[$d] ?? 0) : 0;
+
+            $bugBacklog += $createdBug;
+            $bugBacklog -= $completedFix;
+            $bugBacklog = max(0, $bugBacklog);
+
+            $progressBacklog += $createdProgress;
+            $progressBacklog -= $completedProgress;
+            $progressBacklog = max(0, $progressBacklog);
+
+            $bugBacklogTrend[] = $bugBacklog;
+            $progressBacklogTrend[] = $progressBacklog;
+        }
 
         // Optional groupings (log-based)
         $groupBySystem = $logs
@@ -257,15 +395,23 @@ class ReportController extends Controller
                 'types' => $types,
                 'view_mode' => $viewMode,
                 'report_view' => $reportView,
+                'progress_status_period' => $progressStatusPeriod,
+                'completion_trend_period' => $completionTrendPeriod,
+                'backlog_trend_period' => $backlogTrendPeriod,
             ],
             'systems' => $systems,
             'features' => $filterFeatures,
             'kpis' => [
                 'total_logs' => $totalLogs,
                 'progress_logs' => $progressCount,
+                'progress_on_progress' => $progressOnProgressCount,
+                'progress_done' => $progressDoneCount,
                 'bug_logs' => $bugCount,
                 'fix_logs' => $fixCount,
                 'resolved_bug_count' => $resolvedBugCount,
+                'completion_rate' => ($progressCount + $fixCount) > 0
+                    ? (int) round((($progressDoneCount + $resolvedFix->count()) / ($progressCount + $fixCount)) * 100)
+                    : 0,
                 'bug_sla_on_time_rate' => $resolvedFix->count()
                     ? (int) round(($onTimeResolvedCount / $resolvedFix->count()) * 100)
                     : 0,
@@ -293,10 +439,6 @@ class ReportController extends Controller
                 'by_feature' => $groupByFeature,
             ],
             'charts' => [
-                'progress_trend' => [
-                    'labels' => $dates,
-                    'data' => $progressTrend,
-                ],
                 'bug_vs_fix' => [
                     'bug' => $bugCount,
                     'fix' => $fixCount,
@@ -304,6 +446,18 @@ class ReportController extends Controller
                 'bug_sla_on_time' => [
                     'on_time' => $onTimeResolvedCount,
                     'late' => $lateResolvedCount,
+                ],
+                'progress_status' => $progressStatus,
+                'impact_distribution' => $impactDistribution,
+                'completion_trend' => [
+                    'labels' => $dates,
+                    'progress_done' => $completionProgressSeries,
+                    'fix_resolved' => $completionFixSeries,
+                ],
+                'open_backlog_trend' => [
+                    'labels' => $dates,
+                    'open_bug' => $bugBacklogTrend,
+                    'open_progress' => $progressBacklogTrend,
                 ],
             ],
         ]);
@@ -368,6 +522,15 @@ class ReportController extends Controller
         $fixCount = $logs->where('type', 'fix')->count();
         $resolvedBugCount = $logs->where('type', 'bug')->where('status', 'resolved')->count();
 
+        $progressOnProgressCount = $logs
+            ->where('type', 'progress')
+            ->where('status', 'on_progress')
+            ->count();
+        $progressDoneCount = $logs
+            ->where('type', 'progress')
+            ->where('status', 'done')
+            ->count();
+
         $resolvedFix = $logs
             ->where('type', 'fix')
             ->where('status', 'resolved')
@@ -398,6 +561,8 @@ class ReportController extends Controller
                 'bug_logs' => $bugCount,
                 'fix_logs' => $fixCount,
                 'resolved_bug_count' => $resolvedBugCount,
+                'progress_on_progress' => $progressOnProgressCount,
+                'progress_done' => $progressDoneCount,
                 'sla_on_time_rate' => $slaOnTimeRate,
                 'sla_on_time' => $onTimeResolvedCount,
                 'sla_late' => $lateResolvedCount,

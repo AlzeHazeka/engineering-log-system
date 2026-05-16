@@ -11,10 +11,13 @@ import {
     systemStageLabel,
 } from "@/Utils/enums";
 import { ref } from "vue";
+import { useSoftRevalidate } from "@/Utils/softRevalidate";
 
 const props = defineProps({
     systems: Array,
 });
+
+useSoftRevalidate({ only: ["systems"] });
 
 //Delete Actions
 const showDeleteModal = ref(false);
@@ -52,7 +55,9 @@ const stageText = (stage) => systemStageLabel[stage] ?? "Unknown";
 <template>
     <AuthenticatedLayout>
         <div class="space-y-6">
-            <div class="flex items-start justify-between gap-4">
+            <div
+                class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"
+            >
                 <div>
                     <h2 class="text-xl font-semibold text-gray-900">
                         Systems
@@ -64,7 +69,7 @@ const stageText = (stage) => systemStageLabel[stage] ?? "Unknown";
 
                 <a
                     :href="route('systems.create')"
-                    class="inline-flex items-center justify-center rounded-lg bg-black text-white p-2 hover:opacity-90 transition"
+                    class="self-start sm:self-auto inline-flex items-center justify-center rounded-lg bg-black text-white p-2 hover:opacity-90 transition"
                     title="Create system"
                     aria-label="Create system"
                 >

@@ -7,20 +7,28 @@ const props = defineProps({
     systems: Array,
     referenceLogs: Array,
     selectedReferenceIds: Array,
+    returnUrl: { type: String, default: null },
 });
+
+const submitUrl = props.returnUrl
+    ? `${route("logs.update", props.log.id)}?return=${encodeURIComponent(
+          props.returnUrl
+      )}`
+    : route("logs.update", props.log.id);
 </script>
 
 <template>
     <AuthenticatedLayout>
-        <div class="py-8">
+        <div class="py-4 sm:py-8">
             <div class="max-w-4xl mx-auto px-4">
                 <LogForm
                     :systems="systems"
                     :referenceLogs="referenceLogs"
                     :selectedReferenceIds="selectedReferenceIds"
                     :log="log"
+                    :returnUrl="returnUrl"
                     method="put"
-                    :submitUrl="route('logs.update', log.id)"
+                    :submitUrl="submitUrl"
                 />
             </div>
         </div>

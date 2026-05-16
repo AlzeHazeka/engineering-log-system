@@ -45,7 +45,8 @@ const detectType = () => {
     if (form.stage === "production") return "deployment";
     if (form.status === "paused" || form.status === "deprecated")
         return "decision";
-    return "progress";
+    // Other lifecycle/status changes are better logged as an event (no progress status).
+    return "decision";
 };
 
 const logDraft = reactive({

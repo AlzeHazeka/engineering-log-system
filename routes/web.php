@@ -39,6 +39,8 @@ Route::middleware('auth')->group(function () {
 
     // Logs CRUD
     Route::resource('logs', LogController::class);
+    Route::put('/logs/{log}/mark-done', [LogController::class, 'markDone'])
+        ->name('logs.markDone');
 
     // Users CRUD (admin-only)
     Route::resource('users', UserController::class)

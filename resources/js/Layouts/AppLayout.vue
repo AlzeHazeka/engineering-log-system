@@ -301,10 +301,10 @@ const logout = () => {
                     </div>
                 </header>
 
-                <main class="p-6 sm:p-8">
+                <main class="p-4 sm:p-8">
                     <div class="mx-auto max-w-7xl">
                         <div
-                            class="bg-white border border-slate-200 rounded-xl p-6 sm:p-8"
+                            class="bg-white border border-slate-200 rounded-xl p-4 sm:p-8"
                         >
                             <slot />
                         </div>
